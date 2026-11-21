@@ -1,0 +1,63 @@
+# PRZYKŁAD nowej klasy dokumentu skonfigurowanej wyłącznie w YAML - bez ani jednej linii Pythona.
+# Ogłoszenie o zamówieniu z Biuletynu Zamówień Publicznych (BZP).
+#
+# Ten plik celowo leży w config/examples/, a nie w config/classes/: w zadaniu UZP ogłoszenia
+# BZP są dokumentami negatywnymi (mają dawać pusty JSON). Aby włączyć klasę:
+#   1. skopiuj ten plik do config/classes/,
+#   2. wrzuć kilka przykładowych PDF-ów do training/ogloszenie_bzp/ (i usuń ogłoszenia z negatywów),
+#   3. uruchom train.bat - klasyfikator nauczy się rozpoznawać nową klasę.
+#
+# Jak działa `extract:` - patrz backend/app/extraction/engine.py (opis na początku pliku):
+#   after   - etykiety (wyrażenia regularne); wartość jest szukana zaraz za pierwszą znalezioną
+#   value   - co odczytać: line | text | date | amount | account | digits | email | person | word | flag
+#   pattern - własne wyrażenie regularne z jedną grupą (zamiast value)
+# Etykiety działają bez względu na wielkość liter i polskie znaki (OCR często je gubi).
+name: ogloszenie_bzp
+label: Ogłoszenie o zamówieniu (BZP)
+description: >
+  Ogłoszenie o zamówieniu publikowane w Biuletynie Zamówień Publicznych: zamawiający,
+  nazwa i identyfikator postępowania, numer i data ogłoszenia.
+max_pages: 2
+output:
+  ogloszenie_bzp:
+    numer_ogloszenia:
+      type: string
+      normalize: bzp
+      description: "Numer ogłoszenia w BZP, np. '2025/BZP 00143067'."
+      extract: {after: ['Numer ogłoszenia\s*:'], value: line}
+    data_ogloszenia:
+      type: date
+      description: "Data publikacji ogłoszenia."
+      extract: {after: ['Data ogłoszenia\s*:'], value: date}
+    rodzaj_zamowienia:
+      type: string
+      enum: [Usługi, Dostawy, Roboty budowlane]
+      description: "Rodzaj zamówienia z nagłówka ogłoszenia."
+      extract: {after: ['^Ogłoszenie o zamówieniu\s*$'], value: line}
+    nazwa_zamowienia:
+      type: string
+      description: "Nazwa zamówienia (może zajmować kilka linii)."
+      extract: {after: ['Nazwa zamówienia albo umowy ramowej\s*:'], value: text, until: ['\d+\.\d+\.?\)'], lines: 4}
+    identyfikator_postepowania:
+      type: string
+      description: "Identyfikator postępowania (ocds-...)."
+      extract: {pattern: '(ocds-[\w-]+)'}
+    zamawiajacy:
+      _section: {from: ['SEKCJA I\b'], to: ['SEKCJA II\b']}   # pola zamawiającego tylko z sekcji I
+      nazwa:
+        type: string
+        description: "Nazwa zamawiającego."
+        extract: {after: ['Nazwa zamawiającego\s*:'], value: line}
+      regon:
+        type: string
+        normalize: digits
+        description: "REGON zamawiającego."
+        extract: {after: ['REGON'], value: digits, length: [9, 14]}
+      miejscowosc:
+        type: string
+        description: "Miejscowość z adresu zamawiającego."
+        extract: {after: ['Miejscowość\s*:'], value: line}
+      email:
+        type: string
+        description: "Adres poczty elektronicznej zamawiającego."
+        extract: {after: ['Adres poczty elektronicznej\s*:'], value: email}

@@ -19,6 +19,9 @@ class DocumentClass(BaseModel):
     description: str
     max_pages: int = 3
     instructions: str = ""
+    # wbudowane reguły Pythona dla tej klasy (app/extractor.py: BUILTIN_RULES); pola z `extract:`
+    # w szablonie uzupełniają ich wynik - nowa klasa może mieć wyłącznie reguły z YAML
+    rules: str | None = None
     output: dict[str, Any]  # szablon wynikowego JSON-a (patrz app/schema.py)
 
 

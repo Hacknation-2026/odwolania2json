@@ -5,6 +5,7 @@ description: >
   Pełnomocnictwo - dokument, w którym mocodawca (wykonawca, np. spółka lub konsorcjum) umocowuje
   wskazane osoby do reprezentowania go, np. w postępowaniu odwoławczym przed KIO.
 max_pages: 2
+rules: pelnomocnictwo
 instructions: >
   Mocodawców może być kilku (konsorcjum udzielające pełnomocnictwa wspólnie).
   Imiona i nazwiska podawaj w mianowniku, bez tytułów.

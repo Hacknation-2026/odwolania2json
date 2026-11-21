@@ -4,6 +4,8 @@ Format szablonu:
   - liść:   {type: string|integer|number|date, description, [enum], [normalize], [dictionary], [derive]}
   - obiekt: mapa nazwa -> węzeł
   - tablica: lista z jednym węzłem (szablon elementu)
+Klucze zaczynające się od "_" (np. _section, _split) i "extract" w liściach to konfiguracja
+ekstrakcji (app/extraction/engine.py) - nie trafiają do wyniku.
 """
 
 from typing import Any
@@ -40,7 +42,11 @@ def to_json_schema(node: Any) -> dict:
         return schema
     if isinstance(node, list):
         return {"type": "array", "items": to_json_schema(node[0])}
-    props = {k: to_json_schema(v) for k, v in node.items() if not (is_leaf(v) and "derive" in v)}
+    props = {
+        k: to_json_schema(v)
+        for k, v in node.items()
+        if not k.startswith("_") and not (is_leaf(v) and "derive" in v)
+    }
     return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
 
 
@@ -53,7 +59,12 @@ def field_guide(node: Any, path: str = "") -> list[str]:
         return [f"- {path} ({node['type']}): {schema['description']}"]
     if isinstance(node, list):
         return field_guide(node[0], f"{path}[]")
-    return [line for k, v in node.items() for line in field_guide(v, f"{path}.{k}" if path else k)]
+    return [
+        line
+        for k, v in node.items()
+        if not k.startswith("_")
+        for line in field_guide(v, f"{path}.{k}" if path else k)
+    ]
 
 
 # ---------- dopasowanie odpowiedzi LLM do szablonu ----------
@@ -89,6 +100,7 @@ def conform(node: Any, value: Any) -> Any:
         items = value if isinstance(value, list) else []
         return [conform(node[0], item) for item in items if isinstance(item, dict)]
     value = value if isinstance(value, dict) else {}
+    node = {k: v for k, v in node.items() if not k.startswith("_")}  # bez konfiguracji ekstrakcji
     out = {k: conform(v, value.get(k)) for k, v in node.items()}
     for k, v in node.items():  # pola wyliczane ze słownika
         if is_leaf(v) and (derive := v.get("derive")):

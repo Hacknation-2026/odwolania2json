@@ -39,19 +39,6 @@ _DATE_PATTERN = (
 _PERSON_WORD = r"[^\W\d_]+(?:[-'’][^\W\d_]+)*"
 _PERSON_NAME_PATTERN = rf"{_PERSON_WORD}(?:\s+{_PERSON_WORD}){{1,2}}"
 _EMAIL_PATTERN = r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"
-_REASON_DESCRIPTIONS = {
-    1: "Decyzja o odrzuceniu oferty",
-    2: "Ogłoszenie wyboru oferty",
-    3: "Decyzja o wykluczeniu wykonawcy",
-    4: "Publikacja specyfikacji warunków zamówienia (SWZ)",
-    5: "Modyfikacja treści SWZ",
-    6: "Odpowiedzi/wyjaśnienia do SWZ",
-    7: "Zaniechanie odrzucenia oferty",
-    8: "Zaniechanie wykluczenia wykonawcy",
-    9: "Decyzja o unieważnieniu postępowania",
-    10: "Zaniechanie unieważnienia postępowania",
-    11: "Opis przedmiotu zamówienia (OPZ)",
-}
 _LAWYER_PATTERN = re.compile(
     rf"\b(?:r\.\s*pr\.|adw\.|radca\s+prawny|adwokat)\s+"
     rf"(?P<name>{_PERSON_NAME_PATTERN}?)"
@@ -163,51 +150,18 @@ def _first_allegation(text: str) -> str:
     return _flat(tail[: end.start()] if end else tail[:3000])
 
 
-def _reason_id(text: str) -> int | None:
-    def find_reason(segment: str) -> int | None:
-        checks = (
-            (7, r"\b(?:nie\s+odrzucił|zaniecha\w*\s+odrzucenia)\b"),
-            (8, r"\b(?:nie\s+wykluczył|zaniecha\w*\s+wykluczenia)\b"),
-            (10, r"\b(?:zaniecha\w*\s+unieważnienia|nie\s+unieważnił)\b"),
-            (9, r"\bunieważni\w*\s+(?:postępowan|przetarg)"),
-            (
-                5,
-                r"\b(?:zmodyfik\w*|modyfikac\w*)\b.{0,100}"
-                r"\b(?:SWZ|Specyfikacji\s+Warunków\s+Zamówienia)\b",
-            ),
-            (
-                6,
-                r"\b(?:udziel\w*|odpowiedzi|wyjaśnieni\w*)\b.{0,120}"
-                r"\b(?:odpowiedzi|wyjaśnieni\w*)\b",
-            ),
-            (12, r"\b(?:projektowan\w*\s+postanowie\w*\s+umowy|PPU)\b"),
-            (11, r"\b(?:opis\w*\s+przedmiotu\s+zamówienia|OPZ)\b"),
-            (3, r"\b(?:wyklucz\w*)\b"),
-            (1, r"\b(?:odrzuc\w*\s+ofert\w*)\b"),
-            (
-                2,
-                r"\b(?:ogłosił\s+wybór|wybór\s+oferty|wyboru\s+oferty|"
-                r"wyborze\s+oferty|wyborze\s+jako)\b",
-            ),
-            (
-                4,
-                r"\b(?:opublikow\w*|publikacj\w*|ustaleni\w*)\b.{0,150}"
-                r"\b(?:specyfikacj\w*|SWZ|ogłoszenie o zamówieniu)\b",
-            ),
-            (
-                4,  # "treści Specyfikacji Warunków Zamówienia opublikowanej ..."
-                r"\b(?:specyfikacj\w*\s+warunków\s+zamówienia|SWZ)\b.{0,150}\bopublikow\w*",
-            ),
-        )
-        for reason_id, pattern in checks:
-            if re.search(pattern, segment, re.IGNORECASE):
-                return reason_id
-        return None
+def _reason_id(text: str, keywords: list[dict]) -> int | None:
+    """Reason id from the first contested action (or allegation no. 1).
 
-    action_reason = find_reason(_first_action(text))
+    The patterns come from the class YAML (czynnosc_powod_id.keywords), so they can be
+    changed without touching the code.
+    """
+    from app.extraction.engine import match_keywords
+
+    action_reason = match_keywords(keywords, _first_action(text))
     if action_reason is not None:
         return action_reason
-    return find_reason(_first_allegation(text))
+    return match_keywords(keywords, _first_allegation(text))
 
 
 def _appeal_sections(text: str) -> dict[str, str]:
@@ -405,12 +359,12 @@ def _procurement_fields(text: str) -> dict[str, str | None]:
     }
 
 
-def extract_odwolanie(text: str) -> dict[str, Any]:
+def extract_odwolanie(text: str, doc_class=None) -> dict[str, Any]:
     header_date, place = _header_date_and_place(text)
     action = _first_action(text)
     action_date_match = re.search(_DATE_PATTERN, action, re.IGNORECASE)
     action_date = _parse_date(action_date_match.group()) if action_date_match else None
-    reason_id = _reason_id(text)
+    reason_id = _reason_id(text, _class_config(doc_class, "odwolanie")["OdwolanieKIO"]["czynnosc_powod_id"].get("keywords", []))
 
     sections = _appeal_sections(text)
     appealing_section = sections.get("odwołujący", "")
@@ -489,7 +443,7 @@ def extract_odwolanie(text: str) -> dict[str, Any]:
             "data": header_date,
             "czynnosc_dzien": action_date,
             "czynnosc_powod_id": reason_id,
-            "czynnosc_opis": _REASON_DESCRIPTIONS.get(reason_id),
+            "czynnosc_opis": None,  # derived from the dictionary in the YAML template
             "miejscowosc": place,
         },
         "Odwolujacy": appealing,
@@ -883,7 +837,7 @@ def _signature_person_line(
     return names
 
 
-def extract_pelnomocnictwo(text: str) -> dict[str, Any]:
+def extract_pelnomocnictwo(text: str, doc_class=None) -> dict[str, Any]:
     principal_blocks = _principal_blocks(text)
     principal_data = [_principal_data(block) for block in principal_blocks]
     attorneys = _lawyer_names(text) or _granted_names(text)
@@ -1040,7 +994,7 @@ def _payment_title(text: str) -> str | None:
     return None
 
 
-def extract_przelew(text: str) -> dict[str, Any]:
+def extract_przelew(text: str, doc_class=None) -> dict[str, Any]:
     flat = _flat(text)
     reference_match = re.search(
         r"(?i)\b(?:numer\s+referencyjny(?:\s+operacji)?|"
@@ -1096,6 +1050,15 @@ def extract_przelew(text: str) -> dict[str, Any]:
             "z_rachunku": sender,
         }
     }
+
+
+def _class_config(doc_class, name: str) -> dict[str, Any]:
+    """Output template of the class (from YAML) - loaded when called without a DocumentClass."""
+    if doc_class is None:
+        from app.classes.registry import load_classes
+
+        doc_class = load_classes()[name]
+    return doc_class.output
 
 
 def extract_document_fields(document_type: str, text: str) -> dict[str, Any]:

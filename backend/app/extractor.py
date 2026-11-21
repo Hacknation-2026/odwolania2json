@@ -1,16 +1,20 @@
-"""Field extraction for a recognised document class.
+"""Field extraction for a recognised document class - everything is driven by the class YAML.
 
-Default: local, deterministic rules (app/extraction/rules.py) - no API calls.
-A class from YAML that has no rules uses the LLM only when LLM_API_KEY is set;
-otherwise it gets its output template filled with nulls.
+1. `rules: <name>` in the YAML selects built-in Python rules (BUILTIN_RULES) - used for the
+   three UZP classes, where hand-written rules give the best F1.
+2. `extract:` specs on template fields (app/extraction/engine.py) are applied on top: they fill
+   fields the built-in rules left empty, or replace them with `override: true`. A new class can
+   be configured with these specs alone - no code changes.
+3. Fields still empty may be filled by an LLM, but only when LLM_API_KEY is set (optional).
+The result always has exactly the shape of the YAML template (app/schema.py: conform).
 """
 
 from app.classes.registry import DocumentClass
 from app.config import get_settings
-from app.extraction import rules
+from app.extraction import engine, rules
 from app.schema import conform, field_guide, to_json_schema
 
-RULES = {
+BUILTIN_RULES = {
     "odwolanie": rules.extract_odwolanie,
     "pelnomocnictwo": rules.extract_pelnomocnictwo,
     "przelew": rules.extract_przelew,
@@ -25,13 +29,21 @@ SYSTEM = (
 
 def extract(text: str, doc_class: DocumentClass) -> tuple[dict, dict | None, str]:
     """Returns (result shaped like the class template, raw extractor output, method)."""
-    if doc_class.name in RULES:
-        raw = RULES[doc_class.name](text)
-        return conform(doc_class.output, raw), raw, "rules"
-    if get_settings().llm_api_key:
+    template = doc_class.output
+    methods, raw = [], None
+    if doc_class.rules:
+        if doc_class.rules not in BUILTIN_RULES:
+            raise ValueError(f"Klasa {doc_class.name}: nieznane reguły '{doc_class.rules}' (dostępne: {', '.join(BUILTIN_RULES)})")
+        raw = BUILTIN_RULES[doc_class.rules](text, doc_class)
+        methods.append("rules")
+    if engine.has_rules(template):
+        yaml_result = engine.run(template, text)
+        raw = engine.merge(raw, yaml_result, template) if raw is not None else yaml_result
+        methods.append("yaml")
+    if raw is None and get_settings().llm_api_key:
         raw = _extract_llm(text, doc_class)
-        return conform(doc_class.output, raw), raw, "llm"
-    return conform(doc_class.output, {}), None, "none"
+        methods.append("llm")
+    return conform(template, raw or {}), raw, "+".join(methods) or "none"
 
 
 def _extract_llm(text: str, doc_class: DocumentClass) -> dict:

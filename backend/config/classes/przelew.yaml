@@ -5,6 +5,7 @@ description: >
   Potwierdzenie wykonania przelewu bankowego (np. wpis od odwołania na rachunek UZP,
   opłata skarbowa od pełnomocnictwa). Zawiera rachunki, kwotę, tytuł i datę operacji.
 max_pages: 1
+rules: przelew
 output:
   przelew_bankowy:
     data_operacji: {type: date, description: "Data wykonania operacji."}

@@ -3,11 +3,11 @@
 Urząd Zamówień Publicznych – Odwołania2json (HackNation 2026).
 Rozpoznaje dokumenty ze sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, potwierdzenie przelewu) i zapisuje dla każdego PDF-a JSON w [modelu UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026/tree/main/oczekiwane-json). Dokumenty spoza tych klas dostają pusty plik `.json`.
 
-**Pipeline (w całości lokalnie, CPU, bez API):** PDF → tekst (pypdfium2, OCR RapidOCR dla skanów) → klasyfikacja typu (TF-IDF + regresja logistyczna, ~4 MB) → ekstrakcja pól regułami (`backend/app/extraction/rules.py`) → dopasowanie do szablonu z YAML i normalizacja → JSON.
+**Pipeline (w całości lokalnie, CPU, bez API):** PDF → tekst (pypdfium2, OCR RapidOCR dla skanów) → naprawa polskich znaków po OCR → klasyfikacja typu (TF-IDF + regresja logistyczna, ~4 MB) → ekstrakcja pól regułami (wbudowane + konfigurowane w YAML) → dopasowanie do szablonu z YAML i normalizacja → JSON.
 
 **Stack (tylko open source):** Python 3.13, pypdfium2, RapidOCR/ONNX Runtime, scikit-learn, FastAPI. Opcjonalnie LLM przez API zgodne z OpenAI – tylko dla nowych klas z YAML, które nie mają jeszcze reguł, i tylko gdy w `.env` ustawiono `LLM_API_KEY`.
 
-Wynik na danych UZP (`dane/`, 226 PDF-ów): F1 0,938; dokumenty syntetyczne ~0,997, prawdziwe skany (`dane/skany`) 0,387. Czas: ok. 2 s na plik.
+Wynik na danych UZP (`dane/`, 226 PDF-ów): F1 0,978; dokumenty syntetyczne 0,997, prawdziwe skany (`dane/skany`) 0,85–0,86 (także na odłożonej części, nieużywanej przy pisaniu reguł), negatywy 16/16 odrzucone. Pomiar: `python backend/scripts/bench.py`. Dokumentacja techniczna: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
 
 ## Uruchomienie
 
@@ -32,12 +32,12 @@ GUI: `start_gui.bat` – sam otwiera przeglądarkę (domyślnie http://localhost
 
 ## Nowa klasa dokumentu
 
-Bez zmian w kodzie:
-1. Dodaj plik YAML w `backend/config/classes/` (opis + szablon wyjściowego JSON-a). Wzór: [odwolanie.yaml](backend/config/classes/odwolanie.yaml).
+Bez zmian w kodzie – szczegóły i opis wszystkich opcji: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
+1. Dodaj plik YAML w `backend/config/classes/`: szablon wyjściowego JSON-a i reguły `extract:` przy polach (etykieta, data, kwota, rachunek, wyrażenie regularne, słowa kluczowe…). Gotowy wzór klasy skonfigurowanej wyłącznie w YAML: [ogloszenie_bzp.yaml](backend/config/examples/ogloszenie_bzp.yaml).
 2. Wrzuć kilka przykładowych PDF-ów do `training/<nazwa klasy>/` (albo w układzie UZP: PDF + oczekiwany JSON obok). Inne dokumenty, które mają być odrzucane, do `training/brak/`.
 3. Uruchom `train.bat` – trening trwa około minuty na CPU; przed zapisem modelu wypisuje wynik walidacji krzyżowej (całe sprawy odłożone).
 
-Pola nowej klasy wypełniają reguły zarejestrowane w `backend/app/extractor.py` (`RULES`). Dopóki klasa ich nie ma, dostaje szablon z wartościami `null` – albo, jeśli w `.env` ustawiono `LLM_API_KEY`, pola wyciąga LLM według opisów z YAML.
+Nowe pole w istniejącej klasie to też tylko wpis w YAML. Trzy klasy z zadania UZP używają dodatkowo wbudowanych reguł (`rules:` w YAML, `backend/app/extraction/rules.py`), bo dają najwyższe F1; część ich konfiguracji (np. wzorce powodów odwołania) też jest w YAML.
 
 Klasyfikator patrzy na początek dokumentu (1. strona, kolejne gdy jest mało tekstu) i ignoruje polskie znaki, bo OCR często je gubi.
 
