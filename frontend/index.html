@@ -32,6 +32,7 @@
     .drop svg { width: 44px; height: 44px; color: var(--accent); }
     .drop strong { font-size: 17px; }
     .drop small { color: var(--muted); }
+    .pick { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
     .btn { border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600;
       background: var(--accent); color: #fff; cursor: pointer; }
     .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border);
@@ -107,11 +108,15 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
       <path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
     </svg>
-    <strong>Przeciągnij pliki PDF tutaj</strong>
+    <strong>Przeciągnij pliki PDF albo folder tutaj</strong>
     <small>albo</small>
-    <span class="btn">Wybierz pliki</span>
-    <small>Można wgrać kilka dokumentów naraz</small>
+    <span class="pick">
+      <span class="btn">Wybierz pliki</span>
+      <span class="btn" id="pickFolder" role="button" tabindex="0">Wybierz folder</span>
+    </span>
+    <small>Folder jak w CLI: PDF-y z folderu i z jego podfolderów (np. sprawa/case1/*.pdf), jeden poziom w głąb</small>
     <input id="input" type="file" accept="application/pdf,.pdf" multiple hidden>
+    <input id="folderInput" type="file" webkitdirectory multiple hidden>
   </label>
   </div>
 
@@ -119,7 +124,7 @@
     <span id="summary"></span>
     <div class="actions">
       <button class="btn ghost" id="clear">Wyczyść</button>
-      <button class="btn ghost" id="all" disabled>Pobierz wszystkie (.json)</button>
+      <button class="btn ghost" id="all" disabled title="Pliki .json w tej samej strukturze folderów co wgrane PDF-y (jak output/ w CLI)">Pobierz wszystkie (.zip)</button>
     </div>
   </div>
   <div id="list"></div>
@@ -130,8 +135,11 @@
   const input = document.getElementById("input");
   const list = document.getElementById("list");
   const toolbar = document.getElementById("toolbar");
-  const results = []; // {name, data}
+  const results = []; // {path, data} - path relative to the chosen folder, e.g. "case1/odwolanie.json"
   let pending = 0;
+  const MAX_PARALLEL = 2; // OCR is CPU-heavy: process at most two files at a time
+  const queue = [];
+  let running = 0;
   let labels = {}; // class name -> display label
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -187,16 +195,31 @@
     document.getElementById("all").disabled = pending > 0 || results.length === 0;
   }
 
-  async function processFile(file) {
+  // file + its path inside the chosen folder ("case1/odwolanie.pdf"); a card shows up at once,
+  // processing waits in a queue (MAX_PARALLEL at a time)
+  function enqueue(file, path = file.name) {
     const el = document.createElement("div");
     el.className = "item";
     el.innerHTML = `<div class="row">
         <div class="spinner"></div>
-        <div class="name"><b>${esc(file.name)}</b><small>${kb(file.size)} · przetwarzanie…</small></div>
+        <div class="name"><b>${esc(path)}</b><small>${kb(file.size)} · w kolejce…</small></div>
       </div>`;
-    list.prepend(el);
+    list.append(el);
     pending++; updateToolbar();
+    queue.push({ file, path, el });
+    pump();
+  }
 
+  function pump() {
+    while (running < MAX_PARALLEL && queue.length) {
+      const job = queue.shift();
+      running++;
+      processFile(job).finally(() => { running--; pump(); });
+    }
+  }
+
+  async function processFile({ file, path, el }) {
+    el.querySelector("small").textContent = `${kb(file.size)} · przetwarzanie…`;
     try {
       if (!/\.pdf$/i.test(file.name)) throw new Error("To nie jest plik PDF");
       const fd = new FormData();
@@ -208,7 +231,7 @@
       const data = result.data; // kanoniczny JSON (null = dokument spoza klas)
       const trace = result.trace || {};
       const jsonName = file.name.replace(/\.pdf$/i, "") + ".json";
-      results.push({ name: jsonName, data });
+      results.push({ path: path.replace(/\.pdf$/i, "") + ".json", data });
 
       const cls = trace.classification || {};
       const conf = cls.confidence != null ? ` · ${Math.round(cls.confidence * 100)}%` : "";
@@ -217,7 +240,7 @@
       const label = known ? (labels[result.document_type] || result.document_type) : "nie rozpoznano";
       el.innerHTML = `<div class="row">
           <span class="badge ${known ? "ok" : "err"}">${esc(label)}${conf}</span>
-          <div class="name"><b>${esc(file.name)}</b>
+          <div class="name"><b title="${esc(path)}">${esc(path)}</b>
             <small>${kb(file.size)} · ${trace.pages?.length ?? 0} str.${ocr ? ` (OCR: ${ocr})` : ""}${trace.seconds ? ` · ${trace.seconds}s` : ""}</small></div>
           <div class="actions">
             <button class="btn ghost" data-act="copy">Kopiuj</button>
@@ -252,21 +275,110 @@
     } catch (err) {
       el.innerHTML = `<div class="row">
           <span class="badge err">błąd</span>
-          <div class="name"><b>${esc(file.name)}</b><small>${esc(err.message)}</small></div>
+          <div class="name"><b>${esc(path)}</b><small>${esc(err.message)}</small></div>
         </div>`;
+      results.push({ path: path.replace(/\.pdf$/i, "") + ".json", data: null }); // like the CLI: empty file
     } finally {
       pending--; updateToolbar();
     }
   }
 
-  function handle(files) { [...files].forEach(processFile); }
+  const isPdf = (name) => /\.pdf$/i.test(name);
+
+  function handle(files) { [...files].filter((f) => isPdf(f.name)).forEach((f) => enqueue(f)); }
+
+  // Folder (picker): like the CLI - PDFs in the folder and in its direct subfolders (one level deep).
+  // webkitRelativePath = "chosen/case1/x.pdf" -> path inside the chosen folder: "case1/x.pdf"
+  function handleFolder(files) {
+    const picked = [...files]
+      .map((f) => ({ f, parts: (f.webkitRelativePath || f.name).split("/").slice(1) }))
+      .filter(({ f, parts }) => isPdf(f.name) && parts.length >= 1 && parts.length <= 2)
+      .sort((a, b) => a.parts.join("/").localeCompare(b.parts.join("/")));
+    if (!picked.length) return alert("W wybranym folderze (ani w jego podfolderach) nie ma plików PDF.");
+    picked.forEach(({ f, parts }) => enqueue(f, parts.join("/")));
+  }
+
+  // Folder (drag & drop): read the dropped directory, one level deep
+  const readAll = (dir) => new Promise((resolve) => {
+    const reader = dir.createReader(), all = [];
+    const next = () => reader.readEntries((batch) => batch.length ? (all.push(...batch), next()) : resolve(all), () => resolve(all));
+    next();
+  });
+  const entryFile = (entry) => new Promise((resolve) => entry.file(resolve, () => resolve(null)));
+
+  async function collectDropped(entry, prefix, depth) {
+    if (entry.isFile) {
+      if (!isPdf(entry.name)) return [];
+      const file = await entryFile(entry);
+      return file ? [{ file, path: prefix + entry.name }] : [];
+    }
+    if (depth > 1) return []; // deeper than one level below the dropped folder
+    const children = (await readAll(entry)).sort((a, b) => a.name.localeCompare(b.name));
+    const found = [];
+    for (const child of children) {
+      found.push(...await collectDropped(child, depth === 0 ? "" : prefix + entry.name + "/", depth + 1));
+    }
+    return found;
+  }
 
   input.onchange = () => { handle(input.files); input.value = ""; };
+  const folderInput = document.getElementById("folderInput");
+  const pickFolder = document.getElementById("pickFolder");
+  const openFolder = (e) => { e.preventDefault(); e.stopPropagation(); folderInput.click(); };
+  pickFolder.addEventListener("click", openFolder);
+  pickFolder.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") openFolder(e); });
+  folderInput.onchange = () => { handleFolder(folderInput.files); folderInput.value = ""; };
   ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-  drop.addEventListener("drop", (e) => handle(e.dataTransfer.files));
-  document.getElementById("all").onclick = () =>
-    download("odwolania2json.json", Object.fromEntries(results.map((r) => [r.name, r.data])));
+  drop.addEventListener("drop", async (e) => {
+    const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean);
+    if (!entries.some((en) => en.isDirectory)) return handle(e.dataTransfer.files);
+    for (const entry of entries) {
+      for (const { file, path } of await collectDropped(entry, "", 0)) enqueue(file, path);
+    }
+  });
+  // ---- ZIP (method "stored", no compression) - same folder tree as output/ of the CLI, works offline
+  const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc32 = (bytes) => {
+    let c = 0xffffffff;
+    for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+
+  function zip(files) { // [{path, text}] -> Blob
+    const enc = new TextEncoder(), parts = [], central = [];
+    let offset = 0;
+    for (const { path, text } of files) {
+      const name = enc.encode(path), data = enc.encode(text), crc = crc32(data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true); local.setUint16(6, 0x0800, true); // UTF-8 names
+      local.setUint32(14, crc, true); local.setUint32(18, data.length, true); local.setUint32(22, data.length, true);
+      local.setUint16(26, name.length, true);
+      const dir = new DataView(new ArrayBuffer(46));
+      dir.setUint32(0, 0x02014b50, true); dir.setUint16(4, 20, true); dir.setUint16(6, 20, true); dir.setUint16(8, 0x0800, true);
+      dir.setUint32(16, crc, true); dir.setUint32(20, data.length, true); dir.setUint32(24, data.length, true);
+      dir.setUint16(28, name.length, true); dir.setUint32(42, offset, true);
+      parts.push(local, name, data);
+      central.push(dir, name);
+      offset += 30 + name.length + data.length;
+    }
+    const size = central.reduce((n, p) => n + p.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, size, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end], { type: "application/zip" });
+  }
+
+  document.getElementById("all").onclick = () => {
+    const blob = zip(results.map((r) => ({ path: r.path, text: toText(r.data) })));
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "output.zip" });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
   document.getElementById("clear").onclick = () => {
     if (pending) return;
     list.innerHTML = ""; results.length = 0;
