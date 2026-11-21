@@ -114,7 +114,6 @@
       <span class="btn">Wybierz pliki</span>
       <span class="btn" id="pickFolder" role="button" tabindex="0">Wybierz folder</span>
     </span>
-    <small>Folder jak w CLI: PDF-y z folderu i z jego podfolderów (np. sprawa/case1/*.pdf), jeden poziom w głąb</small>
     <input id="input" type="file" accept="application/pdf,.pdf" multiple hidden>
     <input id="folderInput" type="file" webkitdirectory multiple hidden>
   </label>
@@ -197,7 +196,16 @@
 
   // file + its path inside the chosen folder ("case1/odwolanie.pdf"); a card shows up at once,
   // processing waits in a queue (MAX_PARALLEL at a time)
+  const usedPaths = new Set(); // the same path twice -> "odwolanie (2).pdf", nothing is overwritten in the ZIP
+  function uniquePath(path) {
+    let candidate = path;
+    for (let n = 2; usedPaths.has(candidate.toLowerCase()); n++) candidate = path.replace(/(\.pdf)?$/i, ` (${n})$1`);
+    usedPaths.add(candidate.toLowerCase());
+    return candidate;
+  }
+
   function enqueue(file, path = file.name) {
+    path = uniquePath(path);
     const el = document.createElement("div");
     el.className = "item";
     el.innerHTML = `<div class="row">
@@ -247,7 +255,6 @@
             <button class="btn" data-act="dl">Pobierz JSON</button>
           </div>
         </div>
-        ${cls.reason ? `<div class="meta">${esc(cls.reason)}</div>` : ""}
         <div class="meta">${howExtracted(trace)}</div>
         <details data-compare><summary>Porównaj PDF i JSON</summary>
           <div class="compare">
@@ -288,11 +295,12 @@
   function handle(files) { [...files].filter((f) => isPdf(f.name)).forEach((f) => enqueue(f)); }
 
   // Folder (picker): like the CLI - PDFs in the folder and in its direct subfolders (one level deep).
-  // webkitRelativePath = "chosen/case1/x.pdf" -> path inside the chosen folder: "case1/x.pdf"
+  // The path keeps the chosen folder's name ("przyklad_01/odwolanie.pdf"), so several case folders
+  // uploaded one after another stay apart in output.zip instead of repeating "odwolanie.json".
   function handleFolder(files) {
     const picked = [...files]
-      .map((f) => ({ f, parts: (f.webkitRelativePath || f.name).split("/").slice(1) }))
-      .filter(({ f, parts }) => isPdf(f.name) && parts.length >= 1 && parts.length <= 2)
+      .map((f) => ({ f, parts: (f.webkitRelativePath || f.name).split("/") }))
+      .filter(({ f, parts }) => isPdf(f.name) && parts.length >= 2 && parts.length <= 3)
       .sort((a, b) => a.parts.join("/").localeCompare(b.parts.join("/")));
     if (!picked.length) return alert("W wybranym folderze (ani w jego podfolderach) nie ma plików PDF.");
     picked.forEach(({ f, parts }) => enqueue(f, parts.join("/")));
@@ -316,7 +324,7 @@
     const children = (await readAll(entry)).sort((a, b) => a.name.localeCompare(b.name));
     const found = [];
     for (const child of children) {
-      found.push(...await collectDropped(child, depth === 0 ? "" : prefix + entry.name + "/", depth + 1));
+      found.push(...await collectDropped(child, prefix + entry.name + "/", depth + 1)); // keeps the folder name
     }
     return found;
   }
@@ -381,7 +389,7 @@
   };
   document.getElementById("clear").onclick = () => {
     if (pending) return;
-    list.innerHTML = ""; results.length = 0;
+    list.innerHTML = ""; results.length = 0; usedPaths.clear();
     pdfUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
     updateToolbar();
   };
