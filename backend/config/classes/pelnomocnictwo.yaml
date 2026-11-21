@@ -1,5 +1,6 @@
 # Klasa dokumentu: pełnomocnictwo (zgodne z oczekiwane-json/pelnomocnictwo.json).
 name: pelnomocnictwo
+label: Pełnomocnictwo
 description: >
   Pełnomocnictwo - dokument, w którym mocodawca (wykonawca, np. spółka lub konsorcjum) umocowuje
   wskazane osoby do reprezentowania go, np. w postępowaniu odwoławczym przed KIO.

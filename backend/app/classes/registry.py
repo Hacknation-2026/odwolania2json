@@ -15,6 +15,7 @@ from app.config import get_settings
 
 class DocumentClass(BaseModel):
     name: str
+    label: str = ""  # display name for the GUI; falls back to `name`
     description: str
     keywords: list[str] = []
     max_pages: int = 3

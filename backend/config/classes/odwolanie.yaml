@@ -2,6 +2,7 @@
 # `output` to szablon wynikowego JSON-a (zgodny z oczekiwane-json/odwolanie.json).
 # Liść = {type, description, [normalize], [dictionary], [derive]}; lista z jednym elementem = tablica obiektów.
 name: odwolanie
+label: Odwołanie do KIO
 description: >
   Odwołanie wnoszone przez wykonawcę do Prezesa Krajowej Izby Odwoławczej wobec czynności
   lub zaniechania zamawiającego w postępowaniu o udzielenie zamówienia publicznego.

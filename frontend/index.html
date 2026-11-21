@@ -61,6 +61,12 @@
       overflow: auto; max-height: 420px; }
     .meta { padding: 0 16px 12px; color: var(--muted); font-size: 13px; }
 
+    .classes { display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+      gap: 6px; margin: -12px 0 20px; font-size: 13px; color: var(--muted); }
+    .chip { padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); cursor: help; }
+    .classes .note { flex-basis: 100%; text-align: center; font-size: 12px; }
+
     @media (max-width: 560px) {
       .row { flex-wrap: wrap; }
       .actions { width: 100%; }
@@ -73,6 +79,8 @@
     <h1>Odwołania<span>2</span>json</h1>
     <p>PDF → JSON</p>
   </header>
+
+  <div class="classes" id="classes" hidden></div>
 
   <label class="drop" id="drop">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -102,8 +110,23 @@
   const toolbar = document.getElementById("toolbar");
   const results = []; // {name, data}
   let pending = 0;
+  let labels = {}; // class name -> display label
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  // Supported document classes come from backend config (YAML), so new classes show up automatically
+  (async () => {
+    try {
+      const classes = await (await fetch("/api/classes")).json();
+      const box = document.getElementById("classes");
+      labels = Object.fromEntries(Object.values(classes).map((c) => [c.name, c.label || c.name]));
+      box.innerHTML = "<span>Obsługiwane dokumenty:</span>" +
+        Object.values(classes).map((c) =>
+          `<span class="chip" title="${esc(c.description.trim())}">${esc(c.label || c.name)}</span>`).join("") +
+        `<span class="note">Inne dokumenty nie są klasyfikowane – dostają pusty plik JSON.</span>`;
+      box.hidden = false;
+    } catch { /* list is optional - upload still works without it */ }
+  })();
   const kb = (n) => n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
 
   // dokument spoza klas -> pusty plik (jak w wymaganiach UZP)
@@ -150,7 +173,7 @@
       const conf = cls.confidence != null ? ` · ${Math.round(cls.confidence * 100)}%` : "";
       const ocr = (trace.pages || []).filter((p) => p.source === "ocr").length;
       const known = data != null;
-      const label = known ? result.document_type : "nie rozpoznano";
+      const label = known ? (labels[result.document_type] || result.document_type) : "nie rozpoznano";
       el.innerHTML = `<div class="row">
           <span class="badge ${known ? "ok" : "err"}">${esc(label)}${conf}</span>
           <div class="name"><b>${esc(file.name)}</b>
