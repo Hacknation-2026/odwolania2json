@@ -21,7 +21,27 @@ else:
 MODEL_DIR = Path(__file__).resolve().parents[1]
 REPOSITORY_DIR = MODEL_DIR.parent
 DEFAULT_MODEL_PATH = MODEL_DIR / "models" / "document_classifier.joblib"
+DEFAULT_INPUT_DIR = REPOSITORY_DIR / "input"
 DEFAULT_OUTPUT_DIR = REPOSITORY_DIR / "output"
+
+
+def remove_empty_dirs(root: Path) -> None:
+    for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+
+
+def clear_previous_outputs(output_dir: Path) -> int:
+    """Remove JSON results of earlier runs, so after a run output/ mirrors exactly what is
+    in input/ now. Only .json files (and folders left empty) are removed."""
+    if not output_dir.is_dir():
+        return 0
+    removed = 0
+    for path in output_dir.rglob("*.json"):
+        path.unlink()
+        removed += 1
+    remove_empty_dirs(output_dir)
+    return removed
 
 
 def load_classifier(model_path: Path) -> DocumentClassifier:
@@ -58,8 +78,27 @@ def pdf_paths(inputs: list[Path]) -> list[Path]:
 def predict(paths: list[Path], classifier: DocumentClassifier) -> list[dict[str, object]]:
     results = []
     for pdf_path in paths:
-        text = extract_pdf_text(pdf_path)
-        result = classifier.classify(text)
+        try:
+            text = extract_pdf_text(pdf_path)
+            result = classifier.classify(text)
+            document = (
+                extract_document_fields(result.document_type, text)
+                if result.status == "classified" and result.document_type
+                else {}
+            )
+        except Exception as error:  # one unreadable PDF must not stop the whole batch
+            results.append(
+                {
+                    "file": str(pdf_path),
+                    "document_type": None,
+                    "confidence": 0.0,
+                    "nearest_example_similarity": 0.0,
+                    "status": "error",
+                    "error": str(error),
+                    "json": {},
+                }
+            )
+            continue
         results.append(
             {
                 "file": str(pdf_path),
@@ -69,11 +108,7 @@ def predict(paths: list[Path], classifier: DocumentClassifier) -> list[dict[str,
                     result.nearest_example_similarity, 4
                 ),
                 "status": result.status,
-                "json": (
-                    extract_document_fields(result.document_type, text)
-                    if result.status == "classified" and result.document_type
-                    else {}
-                ),
+                "json": document,
             }
         )
     return results
@@ -107,10 +142,13 @@ def write_json_outputs(
 
     for result, destination in zip(results, destinations):
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(
-            json.dumps(result["json"], ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
+        # Documents outside the supported types get an empty .json file (UZP requirement).
+        content = (
+            json.dumps(result["json"], ensure_ascii=False, indent=2) + "\n"
+            if result["json"]
+            else ""
         )
+        destination.write_text(content, encoding="utf-8")
     return destinations
 
 
@@ -121,11 +159,26 @@ def main() -> None:
             "Classify PDFs by their text and extract the matching JSON fields."
         )
     )
-    parser.add_argument("inputs", nargs="+", type=Path, help="PDF files or folders.")
+    parser.add_argument(
+        "inputs",
+        nargs="*",
+        type=Path,
+        default=[DEFAULT_INPUT_DIR],
+        help="PDF files or folders (default: input/).",
+    )
     parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--keep-output",
+        action="store_true",
+        help="Do not remove results of earlier runs from the default output/ folder.",
+    )
     args = parser.parse_args()
     try:
+        # Start every run with a clean output/, so it holds only results for the current
+        # input/. A custom --output-dir is never cleared.
+        if not args.keep_output and args.output_dir.resolve() == DEFAULT_OUTPUT_DIR.resolve():
+            clear_previous_outputs(args.output_dir)
         classifier = load_classifier(args.model_path)
         results = predict(pdf_paths(args.inputs), classifier)
         outputs = write_json_outputs(results, args.inputs, args.output_dir)
@@ -141,6 +194,7 @@ def main() -> None:
                     "document_type": result["document_type"],
                     "confidence": result["confidence"],
                     "status": result["status"],
+                    **({"error": result["error"]} if "error" in result else {}),
                 },
                 ensure_ascii=False,
             )

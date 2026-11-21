@@ -228,10 +228,8 @@ class DocumentClassifierTests(unittest.TestCase):
                 json.loads(destinations[0].read_text(encoding="utf-8")),
                 {"OdwolanieKIO": {}},
             )
-            self.assertEqual(
-                json.loads(destinations[1].read_text(encoding="utf-8")),
-                {},
-            )
+            # unsupported documents get an empty .json file (UZP requirement)
+            self.assertEqual(destinations[1].read_text(encoding="utf-8"), "")
 
     def test_cli_reports_elapsed_time_after_conversion(self) -> None:
         stderr = StringIO()

@@ -6,6 +6,9 @@ venv/
 .env
 .pytest_cache/
 .ruff_cache/
-/input/
-output/
+# input/ and output/ must exist in the app root (UZP); their contents are not tracked
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
 model/data/raw_augmented/*

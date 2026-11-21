@@ -32,18 +32,25 @@ validation and test:
 python model/src/train.py
 ```
 
-Classify PDFs and convert each recognized document to its matching JSON schema:
+Classify PDFs and convert each recognized document to its matching JSON schema.
+Put the PDFs (for example one folder per case) in `input/` and run:
 
 ```bash
+start.bat                              # Windows: creates .venv, installs requirements, processes input/
+python model/src/predict.py            # same, without the wrapper
 python model/src/predict.py input/example.pdf
-python model/src/predict.py input/
 ```
+
+Every run starts by clearing earlier results from `output/`, so afterwards
+`output/` mirrors exactly the PDFs currently in `input/` (`--keep-output` turns
+this off; a custom `--output-dir` is never cleared). `input/` is never modified.
 
 JSON files are written to `output/`, preserving the directory structure under
 the input folder and using the same basename as each PDF. For example,
 `input/case1/document.pdf` produces `output/case1/document.json`. Override the
 destination with `--output-dir path/to/output`. Documents classified as
-unsupported or uncertain produce an empty `{}` JSON object.
+unsupported or uncertain, and PDFs that cannot be read, produce an empty `.json`
+file; one bad PDF does not stop the rest of the batch.
 
 The trained classifier identifies the document type from its text. A local,
 deterministic extractor then fills the corresponding fields for odwołania,
