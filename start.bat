@@ -6,8 +6,9 @@ setlocal
 cd /d "%~dp0"
 call tools\setup.bat || goto :error
 
-cd backend
-..\.venv\Scripts\python -m app.cli %*
+REM sciezki w argumentach (--input, --output) liczone od folderu projektu
+set "PYTHONPATH=%~dp0backend"
+.venv\Scripts\python -m app.cli %*
 exit /b %errorlevel%
 
 :error

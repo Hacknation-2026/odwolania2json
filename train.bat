@@ -5,8 +5,9 @@ setlocal
 cd /d "%~dp0"
 call tools\setup.bat || goto :error
 
-cd backend
-..\.venv\Scripts\python -m app.train_classifier %* || goto :error
+REM sciezki w argumentach (--data) liczone od folderu projektu
+set "PYTHONPATH=%~dp0backend"
+.venv\Scripts\python -m app.train_classifier %* || goto :error
 pause
 exit /b 0
 
