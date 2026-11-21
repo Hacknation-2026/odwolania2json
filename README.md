@@ -5,7 +5,7 @@ Rozpoznaje dokumenty ze sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, po
 
 **Pipeline:** PDF → tekst (pypdfium2, OCR RapidOCR dla skanów) → klasyfikacja po treści (LLM) → ekstrakcja pól wg szablonu z YAML (LLM + JSON Schema) → normalizacja → JSON
 
-**Stack (tylko open source):** Python 3.13, pypdfium2, RapidOCR/ONNX Runtime (CPU), FastAPI, model open-weight przez API zgodne z OpenAI – tymczasowo OpenRouter z darmowym modelem `google/gemma-4-31b-it:free` (placeholder; docelowo dostawca z serwerami w UE/EOG, model do wyboru).
+**Stack (tylko open source):** Python 3.13, pypdfium2, RapidOCR/ONNX Runtime (CPU), FastAPI, model open-weight przez API zgodne z OpenAI – tymczasowo OpenRouter z darmowym modelem `nvidia/nemotron-3.5-super-vl:free` (placeholder; docelowo dostawca z serwerami w UE/EOG, model do wyboru).
 
 ## Uruchomienie
 
