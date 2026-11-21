@@ -8,14 +8,19 @@ import pypdfium2 as pdfium
 
 @lru_cache
 def _engine():
+    import logging
+
     from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
 
     # rozpoznawanie: PP-OCRv5 dla alfabetu łacińskiego (polskie znaki diakrytyczne)
-    return RapidOCR(params={
+    engine = RapidOCR(params={
+        "Global.log_level": "warning",
         "Rec.lang_type": LangRec.LATIN,
         "Rec.ocr_version": OCRVersion.PPOCRV5,
         "Rec.model_type": ModelType.MOBILE,
     })
+    logging.getLogger("RapidOCR").setLevel(logging.WARNING)
+    return engine
 
 
 def ocr_page(page: pdfium.PdfPage, dpi: int = 200) -> str:
