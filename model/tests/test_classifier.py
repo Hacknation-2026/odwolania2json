@@ -1,12 +1,21 @@
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pymupdf
 
 from src.classifier import DocumentClassifier
-from src.predict import load_classifier, pdf_paths, predict, write_json_outputs
+from src.predict import (
+    load_classifier,
+    main as predict_main,
+    pdf_paths,
+    predict,
+    write_json_outputs,
+)
 from src.train import train
 
 
@@ -126,6 +135,11 @@ class DocumentClassifierTests(unittest.TestCase):
                     ('"Pełnomocnictwo mocodawca"', '"pelnomocnictwo"'),
                     ('"Przelew kwota rachunek"', '"przelew"'),
                 ],
+                "validation": [
+                    ('"ODWOŁANIE Krajowa Izba"', '"odwolanie"'),
+                    ('"Pełnomocnictwo pełnomocnik"', '"pelnomocnictwo"'),
+                    ('"Przelew kwota"', '"przelew"'),
+                ],
             }
             for split, examples in rows.items():
                 lines = [
@@ -189,6 +203,37 @@ class DocumentClassifierTests(unittest.TestCase):
                 json.loads(destinations[1].read_text(encoding="utf-8")),
                 {},
             )
+
+    def test_cli_reports_elapsed_time_after_conversion(self) -> None:
+        stderr = StringIO()
+        stdout = StringIO()
+        with (
+            patch("sys.argv", ["predict.py", "document.pdf"]),
+            patch("src.predict.time.perf_counter", side_effect=[10.0, 12.5]),
+            patch("src.predict.load_classifier"),
+            patch("src.predict.pdf_paths", return_value=[Path("document.pdf")]),
+            patch(
+                "src.predict.predict",
+                return_value=[
+                    {
+                        "file": "document.pdf",
+                        "document_type": "odwolanie",
+                        "confidence": 0.9,
+                        "status": "classified",
+                    }
+                ],
+            ),
+            patch(
+                "src.predict.write_json_outputs",
+                return_value=[Path("output/document.json")],
+            ),
+            redirect_stderr(stderr),
+            redirect_stdout(stdout),
+        ):
+            predict_main()
+
+        self.assertIn("Processing completed in 2.50 seconds.", stderr.getvalue())
+        self.assertEqual(len(stdout.getvalue().splitlines()), 1)
 
 
 if __name__ == "__main__":
