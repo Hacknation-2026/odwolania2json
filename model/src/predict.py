@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
+import time
 
 import joblib
 
@@ -113,6 +115,7 @@ def write_json_outputs(
 
 
 def main() -> None:
+    started_at = time.perf_counter()
     parser = argparse.ArgumentParser(
         description=(
             "Classify PDFs by their text and extract the matching JSON fields."
@@ -128,6 +131,7 @@ def main() -> None:
         outputs = write_json_outputs(results, args.inputs, args.output_dir)
     except (FileNotFoundError, OSError, ValueError) as error:
         parser.error(str(error))
+    elapsed_seconds = time.perf_counter() - started_at
     for result, output_path in zip(results, outputs):
         print(
             json.dumps(
@@ -141,6 +145,7 @@ def main() -> None:
                 ensure_ascii=False,
             )
         )
+    print(f"Processing completed in {elapsed_seconds:.2f} seconds.", file=sys.stderr)
 
 
 if __name__ == "__main__":

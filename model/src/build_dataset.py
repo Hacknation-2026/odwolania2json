@@ -17,6 +17,8 @@ except ImportError:
 MODEL_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_DIR = MODEL_DIR / "data" / "raw"
 DEFAULT_OUTPUT_DIR = MODEL_DIR / "data" / "processed"
+DEFAULT_VALIDATION_RATIO = 1 / 6
+DEFAULT_TEST_RATIO = 1 / 6
 LABEL_FILENAME_BY_PDF = {
     "potwierdzenie_przelewu.pdf": "przelew.json",
 }
@@ -90,9 +92,9 @@ def load_examples(input_dir: Path) -> list[dict[str, Any]]:
 
 def split_by_case(
     examples: list[dict[str, Any]],
-    validation_ratio: float,
-    test_ratio: float,
-    seed: int,
+    validation_ratio: float = DEFAULT_VALIDATION_RATIO,
+    test_ratio: float = DEFAULT_TEST_RATIO,
+    seed: int = 42,
 ) -> dict[str, list[dict[str, Any]]]:
     if validation_ratio <= 0 or test_ratio <= 0:
         raise ValueError("Validation and test ratios must both be greater than zero.")
@@ -158,8 +160,10 @@ def main() -> None:
         default=DEFAULT_OUTPUT_DIR,
         help=f"Folder for JSONL splits (default: {DEFAULT_OUTPUT_DIR})",
     )
-    parser.add_argument("--validation-ratio", type=float, default=0.1)
-    parser.add_argument("--test-ratio", type=float, default=0.1)
+    parser.add_argument(
+        "--validation-ratio", type=float, default=DEFAULT_VALIDATION_RATIO
+    )
+    parser.add_argument("--test-ratio", type=float, default=DEFAULT_TEST_RATIO)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 

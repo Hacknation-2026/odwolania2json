@@ -12,14 +12,17 @@ example of the predicted class; this lets the classifier reject unrelated
 documents even when its probability for one known class is high. Low-confidence
 or dissimilar predictions are returned as uncertain instead of forcing a type.
 
-Install dependencies and build the case-wise dataset splits:
+Install dependencies and build the case-wise dataset splits. The default split
+randomly assigns 40 of the 60 case folders to training, 10 to validation, and
+10 to testing; all PDFs from a case stay together:
 
 ```bash
 python -m pip install -r requirements.txt
 python model/src/build_dataset.py
 ```
 
-Train and evaluate the model on the held-out test split:
+Train using only the training split, then report metrics separately for
+validation and test:
 
 ```bash
 python model/src/train.py
@@ -77,5 +80,8 @@ model/.venv/bin/python model/src/build_dataset.py --input-dir Model/Data
 ```
 
 The converter writes `train.jsonl`, `validation.jsonl`, and `test.jsonl` under
-`model/data/processed/`. All documents from a case stay in the same split.
+`model/data/processed/`. The default ratios are 40/10/10 case folders for the
+60-folder dataset. The random assignment uses seed 42 and can be changed with
+`--seed`; ratios can be overridden with `--validation-ratio` and
+`--test-ratio`. All documents from a case stay in the same split.
 Scanned PDFs without selectable text need OCR before conversion.
