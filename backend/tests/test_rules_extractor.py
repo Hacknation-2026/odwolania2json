@@ -122,3 +122,44 @@ r. pr. Jan Kowalski
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealScanLayoutTests(unittest.TestCase):
+    """Layouts seen in the real UZP scans (dane/skany), after OCR text repair."""
+
+    def test_dashed_nip_joint_buyers_and_appeal_list(self) -> None:
+        result = extract_document_fields(
+            "odwolanie",
+            """Białystok, 10.04.2026 r.
+Odwołujący:
+Medicor Infrastruktura S.A.
+KRS: 9994354396, NIP: 999-509-02-81, REGON: 999368597
+reprezentowany przez pełnomocnika:
+adw. Mateusz Wierzbicki
+adres do korespondencji:
+Kancelaria Adwokacka adw. Mateusz Wierzbicki
+ul. Przemysłowa 64, 20-630 Lublin
+Zamawiający:
+Zamawiający wspólnie udzielający zamówienia:
+1) Zarząd Dróg Powiatowych w Brzozowcu
+NIP: 999-239-80-73
+– Zamawiający prowadzący postępowanie
+2) Zakład Gospodarki Komunalnej w Zielonkowie
+REGON: 999806152
+Dotyczy:
+ODWOŁANIE
+wnoszę odwołanie wobec:
+1. czynności Zamawiającego polegającej na odrzuceniu oferty Odwołującego, o której Odwołujący
+został poinformowany pismem z 1 kwietnia 2026 roku;
+2. zaniechania wezwania;
+""",
+        )
+        appeal = result["OdwolanieKIO"]
+        self.assertEqual((appeal["czynnosc_powod_id"], appeal["czynnosc_dzien"]), (1, "2026-04-01"))
+        party = result["Odwolujacy"][0]
+        self.assertEqual(party["nip"], "9995090281")
+        self.assertEqual(party["pelnomocnik"]["nazwa"], "Kancelaria Adwokacka adw. Mateusz Wierzbicki")
+        buyers = result["Zamawiajacy"]
+        self.assertEqual([b["nazwa"] for b in buyers], ["Zarząd Dróg Powiatowych w Brzozowcu", "Zakład Gospodarki Komunalnej w Zielonkowie"])
+        self.assertEqual([b["prowadzacy_postepowanie"] for b in buyers], [1, 0])
+        self.assertEqual(buyers[0]["nip"], "9992398073")

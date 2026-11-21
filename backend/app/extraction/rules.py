@@ -120,7 +120,9 @@ def _header_date_and_place(text: str) -> tuple[str | None, str | None]:
 
 
 def _first_action(text: str) -> str:
-    action_list = re.search(r"(?i)\bpolegając\w*\s+na\s*:\s*", text)
+    action_list = re.search(r"(?i)\bpolegając\w*\s+na\s*:\s*", text) or re.search(
+        r"(?i)\bodwołani\w*\s+(?:wobec|od)\s*:\s*", text  # "wnoszę odwołanie wobec: 1. ..."
+    )
     if action_list:
         tail = text[action_list.end() :]
         first_item = re.search(r"(?:^|\s)1[.)]\s*", tail[:1500])
@@ -178,6 +180,7 @@ def _reason_id(text: str) -> int | None:
                 r"\b(?:udziel\w*|odpowiedzi|wyjaśnieni\w*)\b.{0,120}"
                 r"\b(?:odpowiedzi|wyjaśnieni\w*)\b",
             ),
+            (12, r"\b(?:projektowan\w*\s+postanowie\w*\s+umowy|PPU)\b"),
             (11, r"\b(?:opis\w*\s+przedmiotu\s+zamówienia|OPZ)\b"),
             (3, r"\b(?:wyklucz\w*)\b"),
             (1, r"\b(?:odrzuc\w*\s+ofert\w*)\b"),
@@ -190,6 +193,10 @@ def _reason_id(text: str) -> int | None:
                 4,
                 r"\b(?:opublikow\w*|publikacj\w*|ustaleni\w*)\b.{0,150}"
                 r"\b(?:specyfikacj\w*|SWZ|ogłoszenie o zamówieniu)\b",
+            ),
+            (
+                4,  # "treści Specyfikacji Warunków Zamówienia opublikowanej ..."
+                r"\b(?:specyfikacj\w*\s+warunków\s+zamówienia|SWZ)\b.{0,150}\bopublikow\w*",
             ),
         )
         for reason_id, pattern in checks:
@@ -222,7 +229,13 @@ def _appeal_sections(text: str) -> dict[str, str]:
                     if not continuation.strip():
                         break
             if valid:
-                starts.append((match.group(1).lower(), offset, heading_end))
+                role = match.group(1).lower()
+                previous = starts[-1] if starts else None
+                if previous and previous[0] == role and not text[previous[2] : offset].strip(" '\"\n\t:"):
+                    # "Zamawiający:" directly followed by "Zamawiający wspólnie udzielający zamówienia:"
+                    starts[-1] = (role, previous[1], heading_end)
+                else:
+                    starts.append((role, offset, heading_end))
         offset += len(line)
 
     sections: dict[str, str] = {}
@@ -246,7 +259,9 @@ def _entity_blocks(section: str, role: str) -> list[tuple[str, str]]:
         r"(?:Lider|Partner)\s+Konsorcjum\b)\s*(?:[–-]\s*[^:\n]*)?:?"
     )
     markers = list(marker.finditer(section))
-    if not markers:
+    if not markers and role == "Zamawiający":  # joint buyers: "1) Zarząd Dróg ...", "2) Zakład ..."
+        markers = list(re.finditer(r"(?m)^\s*\d+\)\s+", section))
+    if not markers or (not marker.search(section) and len(markers) < 2):
         return [("", section)]
     blocks = []
     for index, match in enumerate(markers):
@@ -260,11 +275,18 @@ def _entity_name(block: str) -> str | None:
         r"^(?:ul\.|al\.|pl\.|krs\b|nip\b|regon\b|tel\.|e-?mail\b|"
         r"reprezentowan\w*\b|adres do korespondencji\b|"
         r"kontakt\b|zamawiający\b|odwołujący\b|lider konsorcjum\b|"
-        r"partner konsorcjum\b|oraz\b|dalej\b)",
+        r"partner konsorcjum\b|oraz\b|dalej\b|konsorcjum\b[^:]*:\s*$)",
         re.IGNORECASE,
     )
-    for line in _lines(block):
+    lines = _lines(block)
+    for index, line in enumerate(lines):
         line = re.sub(r"^\d+\)\s*", "", line)
+        line = re.sub(r"\s*\((?:Lider|Partner)\s+Konsorcjum\)\s*$", "", line, flags=re.I)
+        # "Jan Kowalski prowadzący działalność gospodarczą pod firmą" + next line = firm name
+        if index + 1 < len(lines) and re.search(
+            r"(?i)\bprowadząc\w*\s+działalno\w*.*\bpod\s+firm\w*\s*:?\s*$", line
+        ):
+            return lines[index + 1].strip(" ,;:")
         line = re.sub(r"^(?:Zamawiający|Odwołujący)\s*[–-]\s*(?:Lider|Partner)[^:]*:\s*", "", line, flags=re.I)
         if not line or skip.search(line):
             continue
@@ -282,10 +304,13 @@ def _registry(block: str) -> dict[str, str | None]:
     for key, digits in (("krs", 10), ("nip", 10), ("regon", (9, 14))):
         if key == "krs" and is_sole_proprietor:
             continue
-        length = f"(?:\\d{{{digits[0]}}}|\\d{{{digits[1]}}})" if isinstance(digits, tuple) else rf"\d{{{digits}}}"
-        match = re.search(rf"\b{key}\s*:?\s*({length})\b", block, re.IGNORECASE)
+        lengths = digits if isinstance(digits, tuple) else (digits,)
+        # numbers may be split by spaces or dashes ("NIP: 999-509-02-81")
+        match = re.search(rf"\b{key}\s*:?\s*(\d[\d \-]{{7,20}}\d)", block, re.IGNORECASE)
         if match:
-            result[key] = match.group(1)
+            value = re.sub(r"\D", "", match.group(1))
+            if len(value) in lengths:
+                result[key] = value
     return result
 
 
@@ -300,12 +325,20 @@ def _lawyers(text: str) -> list[str]:
 
 def _correspondence_firm(block: str) -> str | None:
     match = re.search(
-        r"adres\s+do\s+korespondencji\s*:\s*(.+?)"
-        r"(?=,\s*(?:ul\.|al\.|pl\.)|,\s*(?:tel\.|e-?mail)|$)",
+        r"adres\s+do\s+korespondenc\w*\s*:\s*(.+?)"
+        r"(?=,?\s+(?:ul\.|al\.|pl\.)\s|,?\s+(?:tel\.|e-?mail\b)|,\s*(?:ul\.|al\.|pl\.|tel\.|e-?mail)|$)",
         _flat(block),
         re.IGNORECASE,
     )
     return _flat(match.group(1)).strip(" ,") if match else None
+
+
+def _letterhead_firm(text: str) -> str | None:
+    """First 'Kancelaria ...' line of the letterhead or footer (not all caps, no web/e-mail)."""
+    for line in _lines(text):
+        if re.match(r"^Kancelari\w*\s+\S", line) and not line.isupper() and not re.search(r"@|www\.|\.example", line):
+            return re.split(r"\s+(?:ul\.|al\.|pl\.|tel\.)\s", line)[0].strip(" ,;:")
+    return None
 
 
 def _appeal_entities(section: str, role: str) -> list[tuple[str, str, str | None]]:
@@ -422,7 +455,7 @@ def extract_odwolanie(text: str) -> dict[str, Any]:
                 "pelnomocnik": (
                     {
                         "imie_nazwisko": attorneys[0],
-                        "nazwa": _correspondence_firm(representative_block),
+                        "nazwa": _correspondence_firm(representative_block) or _letterhead_firm(text),
                         "mail": emails[0] if emails else None,
                     }
                     if attorneys
@@ -437,6 +470,7 @@ def extract_odwolanie(text: str) -> dict[str, Any]:
         registry = _registry(block)
         is_leader = bool(
             re.search(r"\b(?:Lider|prowadzący postępowanie)\b", marker, re.IGNORECASE)
+            or re.search(r"(?i)\bZamawiając\w*\s+prowadząc\w*\s+postępowani", block)
         )
         buyers_output.append(
             {

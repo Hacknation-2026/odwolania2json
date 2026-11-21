@@ -18,7 +18,7 @@ from app.config import get_settings
 
 WORD = re.compile(r"[^\W\d_]{3,}")
 # OCR misreads of ł / ą that are not just a missing mark
-CONFUSIONS = {"t": "l", "i": "l", "q": "a"}
+CONFUSIONS = {"t": "ł", "i": "ł", "q": "ą"}
 MAX_CONFUSIONS = 3
 
 
@@ -64,7 +64,10 @@ def fix_word(word: str) -> str:
             chars = list(lower)
             for i in chosen:
                 chars[i] = CONFUSIONS[chars[i]]
-            candidate = by_skeleton.get(skeleton("".join(chars)))
+            substituted = "".join(chars)
+            if chosen and substituted in known:  # "infrastrukturq" -> "infrastrukturą", not "-a"
+                return _with_case(word, substituted)
+            candidate = by_skeleton.get(skeleton(substituted))
             if candidate:
                 return _with_case(word, candidate)
     return word
@@ -73,7 +76,22 @@ def fix_word(word: str) -> str:
 AMOUNT_ZL = re.compile(r"(?<=\d)(\s*)z[tl1i](?![^\W\d_])")  # "7 500 zt" -> "7 500 zł"
 
 
+COMPANY_FORM = re.compile(r"\b([Ss]p\.?\s*z\s*)[0O]\.\s*[0oO]\.")  # "Sp. z 0.o." -> "Sp. z o.o."
+# reference numbers are upper case: "DA.zP.242.50.2026" -> "DA.ZP.242.50.2026", "zP/107/2026" -> "ZP/107/2026"
+REFERENCE = re.compile(r"(?<![\w@.])[A-Za-z]{1,6}(?:[./][A-Za-z0-9]{1,8}){2,}(?![\w@])")
+
+
+def _upper_reference(match: re.Match) -> str:
+    token = match.group()
+    letters = [c for c in token if c.isalpha()]
+    if "www" in token.lower() or sum(c.isupper() for c in letters) * 2 < len(letters):
+        return token
+    return token.upper()
+
+
 def fix_text(text: str) -> str:
     text = text.replace("ž", "ż").replace("Ž", "Ż")
+    text = COMPANY_FORM.sub(lambda m: m.group(1) + "o.o.", text)
+    text = REFERENCE.sub(_upper_reference, text)
     text = AMOUNT_ZL.sub(lambda m: m.group(1) + "zł", text)
     return WORD.sub(lambda m: fix_word(m.group()), text)
