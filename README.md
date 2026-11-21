@@ -1,7 +1,40 @@
 # odwolania2json
 Urząd Zamówień Publicznych - Odwołania2JSON
 
-## Train the document classifier
+## Quick start
+
+A trained model is included in the repository (`model/models/document_classifier.joblib`),
+so no training is needed. Put the PDFs (for example one folder per case) in `input/`
+and run:
+
+```bash
+start.bat                              # Windows: creates .venv, installs requirements, processes input/
+python model/src/predict.py            # same, without the wrapper
+python model/src/predict.py input/example.pdf
+```
+
+Every run starts by clearing earlier results from `output/`, so afterwards
+`output/` mirrors exactly the PDFs currently in `input/` (`--keep-output` turns
+this off; a custom `--output-dir` is never cleared). `input/` is never modified.
+
+JSON files are written to `output/`, preserving the directory structure under
+the input folder and using the same basename as each PDF. For example,
+`input/case1/document.pdf` produces `output/case1/document.json`. Override the
+destination with `--output-dir path/to/output`. Documents classified as
+unsupported or uncertain, and PDFs that cannot be read, produce an empty `.json`
+file; one bad PDF does not stop the rest of the batch.
+
+The trained classifier identifies the document type from its text. A local,
+deterministic extractor then fills the corresponding fields for odwołania,
+pełnomocnictwa, and transfer confirmations; no external model API is used.
+The CLI prints one JSON Lines status record per PDF, including its type,
+confidence, and output path. PDFs without selectable text require
+OCR before processing.
+
+## Retrain the document classifier (optional)
+
+Only needed after changing the training data or adding a document type;
+`train.py` overwrites the bundled model.
 
 The classifier learns document types from the PDF text and paired JSON labels.
 It uses word and character TF-IDF features with logistic regression, which can
@@ -31,34 +64,6 @@ validation and test:
 ```bash
 python model/src/train.py
 ```
-
-Classify PDFs and convert each recognized document to its matching JSON schema.
-Put the PDFs (for example one folder per case) in `input/` and run:
-
-```bash
-start.bat                              # Windows: creates .venv, installs requirements, processes input/
-python model/src/predict.py            # same, without the wrapper
-python model/src/predict.py input/example.pdf
-```
-
-Every run starts by clearing earlier results from `output/`, so afterwards
-`output/` mirrors exactly the PDFs currently in `input/` (`--keep-output` turns
-this off; a custom `--output-dir` is never cleared). `input/` is never modified.
-
-JSON files are written to `output/`, preserving the directory structure under
-the input folder and using the same basename as each PDF. For example,
-`input/case1/document.pdf` produces `output/case1/document.json`. Override the
-destination with `--output-dir path/to/output`. Documents classified as
-unsupported or uncertain, and PDFs that cannot be read, produce an empty `.json`
-file; one bad PDF does not stop the rest of the batch.
-
-The trained classifier identifies the document type from its text. A local,
-deterministic extractor then fills the corresponding fields for odwołania,
-pełnomocnictwa, and transfer confirmations; no external model API is used.
-The CLI prints one JSON Lines status record per PDF, including its type,
-confidence, and output path. The classifier artifact is saved to
-`model/models/document_classifier.joblib`. PDFs without selectable text require
-OCR before processing.
 
 ## Build PDF-to-JSON training data
 
