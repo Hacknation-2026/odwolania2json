@@ -9,16 +9,23 @@ Rozpoznaje dokumenty ze sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, po
 
 Wynik na danych UZP (`dane/`, 226 PDF-ów): F1 0,978; dokumenty syntetyczne 0,997, prawdziwe skany (`dane/skany`) 0,85–0,86 (także na odłożonej części, nieużywanej przy pisaniu reguł), negatywy 16/16 odrzucone. Pomiar: `python backend/scripts/bench.py`. Dokumentacja techniczna: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
 
-## Uruchomienie
+## Uruchomienie (Windows)
 
-Wytrenowany model jest w repo – nic nie trzeba trenować ani konfigurować.
+Nie trzeba instalować Pythona, mieć GPU ani niczego trenować – wytrenowane modele są w repo.
 
-1. Wrzuć sprawy do `input/` (np. `input/case1/*.pdf`).
-2. Uruchom `start.bat` (tworzy `.venv` i instaluje zależności przy pierwszym uruchomieniu) – wyniki w `output/case1/<nazwa>.json`, ślad przetwarzania w `logs/`.
+1. Pobierz repozytorium (`git clone` albo „Code → Download ZIP” i rozpakuj).
+2. Wrzuć sprawy do folderu `input/`, np. `input/case1/*.pdf`.
+3. Uruchom **`start.bat`** (dwuklik albo z wiersza poleceń). Wyniki pojawią się w `output/case1/<nazwa>.json`, ślad przetwarzania w `logs/`.
 
-Każde uruchomienie najpierw czyści wyniki poprzednich z `output/`, więc po przebiegu `output/` odpowiada dokładnie PDF-om z `input/` (`--keep-output` wyłącza czyszczenie). `input/` nie jest zmieniany. Dokumenty spoza klas i nieczytelne PDF-y dostają pusty plik `.json`; jeden zły plik nie zatrzymuje reszty.
+GUI: **`start_gui.bat`** – sam otwiera przeglądarkę (domyślnie http://localhost:8765; przy zajętym porcie kolejny wolny). Pliki wgrywa się przeciągnięciem, wynik można pobrać jako JSON.
 
-GUI: `start_gui.bat` – sam otwiera przeglądarkę (domyślnie http://localhost:8765, przy zajętym porcie kolejny wolny; Swagger: `/docs`). Opcjonalnie Docker: `docker compose up --build`.
+**Pierwsze uruchomienie** potrzebuje internetu i trwa ok. 2–5 minut: `tools/setup.bat` tworzy środowisko `.venv` z Pythonem 3.13 i instaluje zależności. Jeśli na komputerze nie ma Pythona 3.13, pobiera [uv](https://github.com/astral-sh/uv) (open source), który instaluje Pythona do `tools/python/` – wewnątrz projektu, bez uprawnień administratora. Kolejne uruchomienia działają bez internetu i startują w kilka sekund. Całość zajmuje ok. 600 MB; usunięcie folderu projektu usuwa wszystko.
+
+Każde uruchomienie najpierw czyści wyniki poprzednich z `output/`, więc po przebiegu `output/` odpowiada dokładnie PDF-om z `input/` (`start.bat --keep-output` wyłącza czyszczenie). `input/` nie jest zmieniany. Dokumenty spoza klas i nieczytelne PDF-y dostają pusty plik `.json`; jeden zły plik nie zatrzymuje reszty.
+
+Czas na laptopie bez GPU: dokument z warstwą tekstową poniżej 1 s, skan ok. 2 s na stronę (OCR).
+
+Opcjonalnie Docker: `docker compose up --build` (API na :8000, GUI na :8080).
 
 ## Struktura
 

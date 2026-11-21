@@ -21,6 +21,7 @@ def _engine():
         "Rec.ocr_version": OCRVersion.PPOCRV5,
         "Rec.model_type": ModelType.MOBILE,
         "Rec.rec_batch_num": get_settings().ocr_rec_batch,
+        **({"Rec.model_path": str(rec_model)} if (rec_model := get_settings().ocr_rec_model_path).is_file() else {}),
     })
     logging.getLogger("RapidOCR").setLevel(logging.WARNING)
     return engine

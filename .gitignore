@@ -17,3 +17,7 @@ input/*
 !input/.gitkeep
 output/*
 !output/.gitkeep
+
+# srodowisko przygotowane przez tools\setup.bat
+tools/uv/
+tools/python/
