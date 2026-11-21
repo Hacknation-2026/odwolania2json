@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Ekstrakcja tekstu
     ocr_enabled: bool = True
     ocr_min_chars: int = 50  # poniżej tej liczby znaków strona traktowana jako skan
+    ocr_dpi: int = 200  # rozdzielczość renderowania strony do OCR (300 dpi nie poprawia wyników)
+    # linie tekstu rozpoznawane pojedynczo: ~2x szybciej niż paczkami po 6 przy prawie tej samej jakości
+    # (limit UZP: 150 PDF-ów w 45 min na laptopie bez GPU)
+    ocr_rec_batch: int = 1
 
     gui_port: int = 8765  # first port tried by start_gui.bat; next free one is used if taken
 

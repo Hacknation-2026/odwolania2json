@@ -1,6 +1,7 @@
 """PDF -> tekst (+OCR) -> klasyfikacja (lokalny model) -> ekstrakcja (lokalne reguły) -> JSON (+ ślad)."""
 
 import time
+from collections.abc import Callable
 
 from app.classes.registry import load_classes
 from app.classifier import classify
@@ -15,17 +16,22 @@ def _join(pages) -> str:
 
 def process_pdf(pdf_bytes: bytes, filename: str = "") -> dict:
     """Zwraca {document_type, data, trace}. `data` = None dla dokumentów spoza klas (pusty JSON)."""
+    return process_document(lambda end, start=0: extract_pages(pdf_bytes, end, start), filename)
+
+
+def process_document(load_pages: Callable[..., list], filename: str = "") -> dict:
+    """Jak process_pdf, ale strony dostarcza load_pages(end, start) - np. z cache w benchmarku."""
     started = time.perf_counter()
     classes = load_classes()
     # najpierw tylko strony potrzebne do klasyfikacji - OCR skanów jest najdroższym krokiem
-    pages = extract_pages(pdf_bytes, get_settings().classify_max_pages)
+    pages = load_pages(get_settings().classify_max_pages)
     classification = classify(pages)
     doc_class = classes.get(classification["class"])
 
     data, raw, method = None, None, None
     if doc_class:
         if doc_class.max_pages > len(pages):
-            pages += extract_pages(pdf_bytes, doc_class.max_pages, start=len(pages))
+            pages += load_pages(doc_class.max_pages, len(pages))
         data, raw, method = extract(_join(pages[: doc_class.max_pages]), doc_class)
 
     return {
