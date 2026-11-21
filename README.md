@@ -34,7 +34,7 @@ Opcjonalnie Docker: `docker compose up --build` (API na :8000, GUI na :8080).
 - `backend/config/dictionaries/` – słowniki (np. `czynnosc_powod`)
 - `model/` – wytrenowany klasyfikator typu dokumentu (kod: `backend/app/text_model.py`, trening: `train.bat`)
 - `model/src/augment.py` – generator „zeskanowanych” wersji PDF-ów do treningu (narzędzie deweloperskie, `pip install -r requirements-dev.txt`)
-- `frontend/` – strona do wgrywania PDF-ów
+- `frontend/` – GUI bez frameworka i bez budowania: `index.html`, `css/styles.css`, moduły ES w `js/` (`app.js` – stan i kolejka, `api.js`, `render.js`, `folders.js`, `zip.js`, `util.js`)
 - `input/`, `output/` – foldery wymagane przez UZP
 
 ## Nowa klasa dokumentu
