@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ocr_enabled: bool = True
     ocr_min_chars: int = 50  # poniżej tej liczby znaków strona traktowana jako skan
 
+    gui_port: int = 8765  # first port tried by start_gui.bat; next free one is used if taken
+
     config_dir: Path = BACKEND_DIR / "config"
     frontend_dir: Path = ROOT_DIR / "frontend"
     input_dir: Path = ROOT_DIR / "input"

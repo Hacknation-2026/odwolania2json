@@ -13,7 +13,7 @@ Rozpoznaje dokumenty ze sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, po
 2. Wrzuć sprawy do `input/` (np. `input/case1/*.pdf`).
 3. Uruchom `start.bat` – wyniki w `output/case1/<nazwa>.json`, ślad przetwarzania w `logs/`.
 
-GUI: `start_gui.bat` → http://localhost:8000 (Swagger: `/docs`). Opcjonalnie Docker: `docker compose up --build`.
+GUI: `start_gui.bat` – sam otwiera przeglądarkę (domyślnie http://localhost:8765, przy zajętym porcie kolejny wolny; Swagger: `/docs`). Opcjonalnie Docker: `docker compose up --build`.
 
 ## Struktura
 
