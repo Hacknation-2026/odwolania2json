@@ -6,7 +6,7 @@ from pathlib import Path
 import pymupdf
 
 from src.classifier import DocumentClassifier
-from src.predict import load_classifier, pdf_paths, predict
+from src.predict import load_classifier, pdf_paths, predict, write_json_outputs
 from src.train import train
 
 
@@ -152,6 +152,43 @@ class DocumentClassifierTests(unittest.TestCase):
             text_file.touch()
             with self.assertRaisesRegex(ValueError, "Expected a PDF"):
                 pdf_paths([text_file])
+
+    def test_writes_json_outputs_with_input_folder_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            input_dir = root / "input"
+            case_dir = input_dir / "case1"
+            case_dir.mkdir(parents=True)
+            appeal_pdf = case_dir / "random-name.pdf"
+            unsupported_pdf = case_dir / "attachment.pdf"
+            appeal_pdf.touch()
+            unsupported_pdf.touch()
+            output_dir = root / "output"
+
+            destinations = write_json_outputs(
+                [
+                    {"file": str(appeal_pdf), "json": {"OdwolanieKIO": {}}},
+                    {"file": str(unsupported_pdf), "json": {}},
+                ],
+                [input_dir],
+                output_dir,
+            )
+
+            self.assertEqual(
+                destinations,
+                [
+                    output_dir / "case1" / "random-name.json",
+                    output_dir / "case1" / "attachment.json",
+                ],
+            )
+            self.assertEqual(
+                json.loads(destinations[0].read_text(encoding="utf-8")),
+                {"OdwolanieKIO": {}},
+            )
+            self.assertEqual(
+                json.loads(destinations[1].read_text(encoding="utf-8")),
+                {},
+            )
 
 
 if __name__ == "__main__":

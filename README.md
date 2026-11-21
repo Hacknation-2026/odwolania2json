@@ -25,17 +25,26 @@ Train and evaluate the model on the held-out test split:
 python model/src/train.py
 ```
 
-Classify a PDF or recursively classify all PDFs in a folder:
+Classify PDFs and convert each recognized document to its matching JSON schema:
 
 ```bash
 python model/src/predict.py input/example.pdf
 python model/src/predict.py input/
 ```
 
-The classifier artifact is saved to `model/models/document_classifier.joblib`.
-Predictions are printed as JSON Lines with the document type, confidence,
-similarity to the nearest labeled example, and status (`classified`,
-`unsupported`, or `uncertain`).
+JSON files are written to `output/`, preserving the directory structure under
+the input folder and using the same basename as each PDF. For example,
+`input/case1/document.pdf` produces `output/case1/document.json`. Override the
+destination with `--output-dir path/to/output`. Documents classified as
+unsupported or uncertain produce an empty `{}` JSON object.
+
+The trained classifier identifies the document type from its text. A local,
+deterministic extractor then fills the corresponding fields for odwołania,
+pełnomocnictwa, and transfer confirmations; no external model API is used.
+The CLI prints one JSON Lines status record per PDF, including its type,
+confidence, and output path. The classifier artifact is saved to
+`model/models/document_classifier.joblib`. PDFs without selectable text require
+OCR before processing.
 
 ## Build PDF-to-JSON training data
 
