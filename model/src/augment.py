@@ -51,6 +51,14 @@ class DistortionConfig:
     prob_ocr_noise: float = 0.30
     ocr_error_rate: float = 0.02
 
+    # Bad fit to page options (shrunk page with border from scanning/printing scaling)
+    prob_bad_fit: float = 0.45
+    bad_fit_scale_min: float = 0.72
+    bad_fit_scale_max: float = 0.92
+    bad_fit_offset_mode: str = "random"  # "random", "center", "top_left"
+    bad_fit_border_style: str = "random"  # "random", "white", "scanner_gray", "paper_tint"
+    bad_fit_edge_line: bool = True
+
 
 # Common Polish OCR misrecognitions and character confusions
 OCR_CONFUSIONS: dict[str, list[str]] = {
@@ -237,6 +245,87 @@ def apply_jpeg_compression(
     return Image.open(buffer).copy()
 
 
+def apply_bad_fit_to_page(
+    image: Image.Image,
+    scale: float,
+    offset_mode: str,
+    border_style: str,
+    add_edge_line: bool,
+    rng: random.Random,
+) -> tuple[Image.Image, dict[str, Any]]:
+    """
+    Simulate poorly adjusted print/scan sizing ('fit to page' double scaling).
+    Scales down the page content and surrounds it with a wide border margin.
+    """
+    orig_w, orig_h = image.size
+    new_w = max(10, int(orig_w * scale))
+    new_h = max(10, int(orig_h * scale))
+
+    shrunk_img = image.resize((new_w, new_h), resample=Image.Resampling.BILINEAR)
+
+    max_dx = max(0, orig_w - new_w)
+    max_dy = max(0, orig_h - new_h)
+
+    if offset_mode == "center":
+        dx = max_dx // 2
+        dy = max_dy // 2
+    elif offset_mode == "top_left":
+        dx = int(max_dx * rng.uniform(0.1, 0.3))
+        dy = int(max_dy * rng.uniform(0.1, 0.3))
+    else:  # "random" / asymmetric margins
+        dx = int(max_dx * rng.uniform(0.15, 0.85)) if max_dx > 0 else 0
+        dy = int(max_dy * rng.uniform(0.15, 0.85)) if max_dy > 0 else 0
+
+    # Border color selection (simulating white margins, scanner bed gray, or cream paper)
+    if border_style == "white":
+        border_color = (255, 255, 255)
+    elif border_style == "scanner_gray":
+        val = rng.randint(225, 240)
+        border_color = (val, val, val)
+    elif border_style == "paper_tint":
+        border_color = rng.choice([
+            (250, 248, 242),
+            (246, 245, 240),
+            (242, 240, 235),
+        ])
+    else:  # "random"
+        choice = rng.choice(["white", "scanner_gray", "paper_tint"])
+        if choice == "white":
+            border_color = (255, 255, 255)
+        elif choice == "scanner_gray":
+            val = rng.randint(225, 240)
+            border_color = (val, val, val)
+        else:
+            border_color = rng.choice([
+                (250, 248, 242),
+                (246, 245, 240),
+                (242, 240, 235),
+            ])
+
+    canvas = Image.new("RGB", (orig_w, orig_h), color=border_color)
+
+    # Draw faint edge line / shadow around the shrunk page simulating physical photocopy / scanner edge
+    if add_edge_line:
+        draw = ImageDraw.Draw(canvas)
+        edge_col = (
+            max(0, border_color[0] - 30),
+            max(0, border_color[1] - 30),
+            max(0, border_color[2] - 30),
+        )
+        draw.rectangle([dx - 1, dy - 1, dx + new_w, dy + new_h], outline=edge_col, width=1)
+
+    canvas.paste(shrunk_img, (dx, dy))
+
+    return canvas, {
+        "scale": scale,
+        "dx_ratio": (dx / orig_w) if orig_w > 0 else 0.0,
+        "dy_ratio": (dy / orig_h) if orig_h > 0 else 0.0,
+        "border_color": border_color,
+        "offset_mode": offset_mode,
+        "border_style": border_style,
+    }
+
+
 def inject_ocr_noise(
     text: str,
     error_rate: float,
@@ -282,6 +371,25 @@ def augment_page(
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
     metadata: dict[str, Any] = {}
+
+    # 0. Bad fit to page (shrink content with border around it from scanning/printing)
+    if rng.random() < config.prob_bad_fit:
+        scale = rng.uniform(config.bad_fit_scale_min, config.bad_fit_scale_max)
+        img, bf_meta = apply_bad_fit_to_page(
+            img,
+            scale=scale,
+            offset_mode=config.bad_fit_offset_mode,
+            border_style=config.bad_fit_border_style,
+            add_edge_line=config.bad_fit_edge_line,
+            rng=rng,
+        )
+        metadata["bad_fit"] = {
+            "scale": round(bf_meta["scale"], 3),
+            "dx_ratio": round(bf_meta["dx_ratio"], 4),
+            "dy_ratio": round(bf_meta["dy_ratio"], 4),
+            "offset_mode": bf_meta["offset_mode"],
+            "border_style": bf_meta["border_style"],
+        }
 
     # 1. Orientation & Flipping
     orientation_mode = "normal"
@@ -438,6 +546,18 @@ def augment_pdf(
                             block_text, config.ocr_error_rate, rng
                         )
 
+                    base_fontsize = 9
+                    if "bad_fit" in page_meta:
+                        bf = page_meta["bad_fit"]
+                        scale = bf["scale"]
+                        dx = page_rect.width * bf["dx_ratio"]
+                        dy = page_rect.height * bf["dy_ratio"]
+                        x0 = dx + x0 * scale
+                        y0 = dy + y0 * scale
+                        x1 = dx + x1 * scale
+                        y1 = dy + y1 * scale
+                        base_fontsize = max(6, int(round(9 * scale)))
+
                     # Transform bounding box if flipped or rotated
                     if orientation == "flip_180":
                         bx0 = page_rect.width - x1
@@ -461,14 +581,14 @@ def augment_pdf(
                         text_rect = pymupdf.Rect(x0, y0, x1, y1)
 
                     # render_mode=3 corresponds to invisible text (searchable text layer)
-                    text_kwargs = {"render_mode": 3, "fontsize": 9}
+                    text_kwargs = {"render_mode": 3, "fontsize": base_fontsize}
                     if fontname:
                         text_kwargs["fontname"] = fontname
 
                     # Use insert_text at baseline to avoid bounding-box clipping failures
                     point = (
                         max(0, min(new_width - 20, text_rect.x0)),
-                        max(10, min(new_height - 10, text_rect.y0 + 10)),
+                        max(10, min(new_height - 10, text_rect.y0 + base_fontsize)),
                     )
                     try:
                         new_page.insert_text(
@@ -586,6 +706,9 @@ def get_preset_config(preset: str) -> DistortionConfig:
             prob_blur=0.15,
             prob_paper_tint=0.30,
             prob_ocr_noise=0.10,
+            prob_bad_fit=0.25,
+            bad_fit_scale_min=0.85,
+            bad_fit_scale_max=0.95,
         )
     elif preset == "severe":
         return DistortionConfig(
@@ -608,6 +731,9 @@ def get_preset_config(preset: str) -> DistortionConfig:
             prob_paper_tint=0.75,
             prob_ocr_noise=0.50,
             ocr_error_rate=0.04,
+            prob_bad_fit=0.70,
+            bad_fit_scale_min=0.65,
+            bad_fit_scale_max=0.85,
         )
     # Default: "realistic"
     return DistortionConfig()
@@ -644,10 +770,70 @@ def main() -> None:
         help="Do not embed searchable text layer (image-only scanned PDF).",
     )
 
+    # Bad fit to page options
+    parser.add_argument(
+        "--bad-fit",
+        action="store_true",
+        help="Force bad-fit-to-page scaling on all pages (prob_bad_fit=1.0).",
+    )
+    parser.add_argument(
+        "--no-bad-fit",
+        action="store_true",
+        help="Disable bad-fit-to-page scaling (prob_bad_fit=0.0).",
+    )
+    parser.add_argument(
+        "--prob-bad-fit",
+        type=float,
+        default=None,
+        help="Probability of applying bad fit to page (0.0 to 1.0).",
+    )
+    parser.add_argument(
+        "--bad-fit-scale-min",
+        type=float,
+        default=None,
+        help="Minimum scale factor for bad fit (e.g. 0.70).",
+    )
+    parser.add_argument(
+        "--bad-fit-scale-max",
+        type=float,
+        default=None,
+        help="Maximum scale factor for bad fit (e.g. 0.92).",
+    )
+    parser.add_argument(
+        "--bad-fit-border",
+        choices=["random", "white", "scanner_gray", "paper_tint"],
+        default=None,
+        help="Border style for bad fit (default: random).",
+    )
+    parser.add_argument(
+        "--bad-fit-offset",
+        choices=["random", "center", "top_left"],
+        default=None,
+        help="Offset positioning for bad fit (default: random).",
+    )
+
     args = parser.parse_args()
     config = get_preset_config(args.preset)
     config.render_dpi = args.dpi
     if args.no_text_layer:
+        config.preserve_text_layer = False
+
+    # Apply bad fit overrides if specified
+    if args.bad_fit:
+        config.prob_bad_fit = 1.0
+    elif args.no_bad_fit:
+        config.prob_bad_fit = 0.0
+    elif args.prob_bad_fit is not None:
+        config.prob_bad_fit = args.prob_bad_fit
+
+    if args.bad_fit_scale_min is not None:
+        config.bad_fit_scale_min = args.bad_fit_scale_min
+    if args.bad_fit_scale_max is not None:
+        config.bad_fit_scale_max = args.bad_fit_scale_max
+    if args.bad_fit_border is not None:
+        config.bad_fit_border_style = args.bad_fit_border
+    if args.bad_fit_offset is not None:
+        config.bad_fit_offset_mode = args.bad_fit_offset
         config.preserve_text_layer = False
 
     if args.input_file:

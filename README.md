@@ -41,6 +41,17 @@ Pola nowej klasy wypełniają reguły zarejestrowane w `backend/app/extractor.py
 
 Klasyfikator patrzy na początek dokumentu (1. strona, kolejne gdy jest mało tekstu) i ignoruje polskie znaki, bo OCR często je gubi.
 
+## Augmentacja danych treningowych (skany)
+
+`model/src/augment.py` zamienia czyste PDF-y w realistyczne „skany” (zachowując pary PDF + JSON), żeby powiększyć zbiór treningowy: złe dopasowanie do strony (pomniejszenie z marginesem), jasność/kontrast i cienie, obrót i skos, szum, smugi, rozmycie, kompresja JPEG. Narzędzie deweloperskie – wymaga `pip install -r requirements-dev.txt`.
+
+```bash
+python model/src/augment.py --input-file model/data/raw/przyklad_01/odwolanie.pdf --output distorted.pdf --bad-fit
+python model/src/augment.py --dataset-dir model/data/raw --output-dir model/data/raw_augmented --copies 2 --preset realistic
+```
+
+Wygenerowane sprawy (`model/data/raw_augmented/`, poza repo) można dodać do treningu klasyfikatora: `train.bat --data ../data/hacknation-2026/dane ../model/data/raw_augmented`.
+
 ## Testy i ewaluacja
 
 ```bash
