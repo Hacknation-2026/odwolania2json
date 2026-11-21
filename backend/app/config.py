@@ -19,10 +19,12 @@ class Settings(BaseSettings):
     llm_structured_output: bool = True
     llm_max_retries: int = 5
 
-    # Klasyfikacja
-    classify_pages: int = 2
-    classify_max_chars: int = 5000
-    min_confidence: float = 0.5
+    # Klasyfikacja: lokalny model (app/text_model.py), trenowany przez train.bat
+    classifier_model_path: Path = ROOT_DIR / "model" / "document_classifier.joblib"
+    classify_min_chars: int = 1000  # model widzi 1. stronę, kolejne tylko gdy tekstu jest mniej
+    classify_max_pages: int = 3
+    min_confidence: float = 0.5  # poniżej tej pewności dokument trafia do "brak" (pusty JSON)
+    training_data_dirs: list[Path] = [ROOT_DIR / "data" / "hacknation-2026" / "dane", ROOT_DIR / "training"]
 
     # Ekstrakcja tekstu
     ocr_enabled: bool = True

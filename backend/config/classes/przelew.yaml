@@ -4,7 +4,6 @@ label: Potwierdzenie przelewu
 description: >
   Potwierdzenie wykonania przelewu bankowego (np. wpis od odwołania na rachunek UZP,
   opłata skarbowa od pełnomocnictwa). Zawiera rachunki, kwotę, tytuł i datę operacji.
-keywords: [potwierdzenie, przelew, rachunek, kwota, tytuł, nadawca, odbiorca]
 max_pages: 1
 output:
   przelew_bankowy:

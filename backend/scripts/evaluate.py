@@ -10,10 +10,12 @@ potwierdzenie_przelewu.pdf ma wzorzec przelew.json. PDF bez wzorca = dokument ne
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
-GOLD_ALIASES = {"potwierdzenie_przelewu": "przelew"}
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.dataset import gold_path  # noqa: E402
 
 
 def flatten(obj, prefix=""):
@@ -32,11 +34,6 @@ def load(path: Path):
     if not path.exists() or not path.read_text(encoding="utf-8").strip():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def gold_path(pdf: Path) -> Path:
-    p = pdf.with_suffix(".json")
-    return p if p.exists() else pdf.with_name(GOLD_ALIASES.get(pdf.stem, pdf.stem) + ".json")
 
 
 def main() -> None:

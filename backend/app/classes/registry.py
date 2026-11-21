@@ -17,7 +17,6 @@ class DocumentClass(BaseModel):
     name: str
     label: str = ""  # display name for the GUI; falls back to `name`
     description: str
-    keywords: list[str] = []
     max_pages: int = 3
     instructions: str = ""
     output: dict[str, Any]  # szablon wynikowego JSON-a (patrz app/schema.py)
