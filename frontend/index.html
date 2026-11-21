@@ -57,16 +57,23 @@
     .spinner { width: 18px; height: 18px; border: 2px solid var(--border);
       border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    details { border-top: 1px solid var(--border); }
-    summary { padding: 10px 16px; cursor: pointer; color: var(--muted); font-size: 13px; }
+    /* icon buttons: text colour, red only for download; "on" = panel open */
+    .icon { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0;
+      border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text);
+      cursor: pointer; transition: .15s; }
+    .icon svg { width: 18px; height: 18px; }
+    .icon:hover { background: var(--code); }
+    .icon.on { background: var(--code); border-color: var(--text); }
+    .icon.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .icon.primary:hover { filter: brightness(1.1); }
+    .icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .panel { border-top: 1px solid var(--border); }
     pre { margin: 0; padding: 14px 16px; background: var(--code); font-size: 12.5px;
       overflow: auto; max-height: 420px; }
-    .meta { padding: 0 16px 12px; color: var(--muted); font-size: 13px; }
-    .meta b { color: var(--text); font-weight: 600; }
 
     /* PDF i JSON obok siebie - łatwe porównanie wyniku z dokumentem */
     .compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px;
-      background: var(--border); border-top: 1px solid var(--border); }
+      background: var(--border); }
     .compare > div { background: var(--card); display: flex; flex-direction: column; min-width: 0; }
     .compare h3 { margin: 0; padding: 8px 16px; font-size: 12px; font-weight: 600; color: var(--muted);
       text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--border); }
@@ -90,7 +97,7 @@
 
     @media (max-width: 560px) {
       .row { flex-wrap: wrap; }
-      .actions { width: 100%; }
+      .actions { width: 100%; justify-content: flex-end; }
     }
   </style>
 </head>
@@ -168,17 +175,16 @@
     (m, str, colon, num) => str ? `<span class="${colon ? "j-key" : "j-str"}">${str}</span>${colon || ""}`
       : num ? `<span class="j-num">${num}</span>` : `<span class="j-null">null</span>`);
 
-  const METHODS = { rules: "reguły wbudowane", yaml: "reguły z YAML", llm: "LLM", none: "brak reguł" };
-  function howExtracted(trace) {
-    const pages = trace.pages || [];
-    const ocr = pages.filter((p) => p.source === "ocr").map((p) => p.number);
-    const text = !pages.length ? "brak tekstu"
-      : ocr.length === pages.length ? `OCR (skan), str. ${ocr.join(", ")}`
-      : ocr.length ? `warstwa tekstowa + OCR str. ${ocr.join(", ")}` : `warstwa tekstowa, str. 1–${pages.length}`;
-    const method = trace.extraction?.method;
-    const how = method ? method.split("+").map((m) => METHODS[m] || m).join(" + ") : null;
-    return `Tekst: <b>${esc(text)}</b>` + (how ? ` · Ekstrakcja: <b>${esc(how)}</b>` : "");
-  }
+  // line icons (stroke = currentColor, so they follow the text colour / the red download button)
+  const svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const ICONS = {
+    compare: svg('<rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/>'),
+    trace: svg('<path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/><path d="m20.2 18.2 1.8 1.8"/>'),
+    copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'),
+    check: svg('<path d="m5 12 5 5 9-10"/>'),
+    download: svg('<path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/>'),
+  };
 
   function download(name, obj) {
     const blob = new Blob([toText(obj)], { type: "application/json" });
@@ -251,33 +257,42 @@
           <div class="name"><b title="${esc(path)}">${esc(path)}</b>
             <small>${kb(file.size)} · ${trace.pages?.length ?? 0} str.${ocr ? ` (OCR: ${ocr})` : ""}${trace.seconds ? ` · ${trace.seconds}s` : ""}</small></div>
           <div class="actions">
-            <button class="btn ghost" data-act="copy">Kopiuj</button>
-            <button class="btn" data-act="dl">Pobierz JSON</button>
+            <button class="icon" data-act="compare" title="Porównaj PDF i JSON" aria-label="Porównaj PDF i JSON" aria-expanded="false">${ICONS.compare}</button>
+            <button class="icon" data-act="trace" title="Ślad przetwarzania" aria-label="Ślad przetwarzania" aria-expanded="false">${ICONS.trace}</button>
+            <button class="icon" data-act="copy" title="Kopiuj JSON" aria-label="Kopiuj JSON">${ICONS.copy}</button>
+            <button class="icon primary" data-act="dl" title="Pobierz JSON" aria-label="Pobierz JSON">${ICONS.download}</button>
           </div>
         </div>
-        <div class="meta">${howExtracted(trace)}</div>
-        <details data-compare><summary>Porównaj PDF i JSON</summary>
+        <div class="panel" data-panel="compare" hidden>
           <div class="compare">
-            <div><h3>Dokument PDF</h3><iframe title="Podgląd PDF: ${esc(file.name)}" loading="lazy"></iframe></div>
+            <div><h3>Dokument PDF</h3><iframe title="Podgląd PDF: ${esc(file.name)}"></iframe></div>
             <div><h3>Wynik JSON</h3>${known ? `<pre>${highlight(data)}</pre>`
               : `<div class="empty">Pusty plik JSON – dokument spoza obsługiwanych klas.</div>`}</div>
           </div>
-        </details>
-        <details><summary>Ślad przetwarzania (pełny)</summary><pre>${esc(JSON.stringify(trace, null, 2))}</pre></details>`;
-      // PDF preview straight from the uploaded file (nothing is stored on the server)
-      const compare = el.querySelector("[data-compare]");
-      compare.addEventListener("toggle", () => {
-        const frame = compare.querySelector("iframe");
-        if (compare.open && !frame.src) {
-          const url = URL.createObjectURL(file);
-          pdfUrls.push(url);
-          frame.src = url;
-        }
-      });
+        </div>
+        <div class="panel" data-panel="trace" hidden><pre>${esc(JSON.stringify(trace, null, 2))}</pre></div>`;
+      // icon buttons toggle the panels below the row
+      for (const name of ["compare", "trace"]) {
+        const button = el.querySelector(`[data-act="${name}"]`);
+        const panel = el.querySelector(`[data-panel="${name}"]`);
+        button.onclick = () => {
+          panel.hidden = !panel.hidden;
+          button.classList.toggle("on", !panel.hidden);
+          button.setAttribute("aria-expanded", String(!panel.hidden));
+          const frame = panel.querySelector("iframe");
+          if (frame && !panel.hidden && !frame.src) { // PDF preview from the uploaded file, nothing stored on the server
+            const url = URL.createObjectURL(file);
+            pdfUrls.push(url);
+            frame.src = url;
+          }
+        };
+      }
       el.querySelector('[data-act="dl"]').onclick = () => download(jsonName, data);
       el.querySelector('[data-act="copy"]').onclick = async (e) => {
+        const button = e.currentTarget;
         await navigator.clipboard.writeText(toText(data));
-        e.target.textContent = "Skopiowano"; setTimeout(() => (e.target.textContent = "Kopiuj"), 1500);
+        button.innerHTML = ICONS.check; button.title = "Skopiowano";
+        setTimeout(() => { button.innerHTML = ICONS.copy; button.title = "Kopiuj JSON"; }, 1500);
       };
     } catch (err) {
       el.innerHTML = `<div class="row">
