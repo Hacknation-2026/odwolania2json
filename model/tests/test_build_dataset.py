@@ -17,6 +17,28 @@ def create_pdf(path: Path, text: str) -> None:
 
 
 class BuildDatasetTests(unittest.TestCase):
+    def test_default_split_assigns_40_10_10_case_folders(self) -> None:
+        examples = [
+            {"case_id": f"case_{case_number:02}", "document": document_number}
+            for case_number in range(60)
+            for document_number in range(3)
+        ]
+
+        splits = split_by_case(examples, seed=42)
+        case_counts = {
+            split_name: len({example["case_id"] for example in split_examples})
+            for split_name, split_examples in splits.items()
+        }
+
+        self.assertEqual(
+            case_counts,
+            {"train": 40, "validation": 10, "test": 10},
+        )
+        self.assertEqual(
+            {name: len(rows) for name, rows in splits.items()},
+            {"train": 120, "validation": 30, "test": 30},
+        )
+
     def test_pairs_documents_and_splits_by_case(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

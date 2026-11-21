@@ -56,6 +56,7 @@ def train(
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
 ) -> None:
     train_rows = read_split(data_dir / "train.jsonl")
+    validation_rows = read_split(data_dir / "validation.jsonl")
     test_rows = read_split(data_dir / "test.jsonl")
 
     classifier = DocumentClassifier.fit(
@@ -63,23 +64,27 @@ def train(
         [row["document_type"] for row in train_rows],
         min_confidence=min_confidence,
     )
-    expected = [row["document_type"] for row in test_rows]
-    predictions = []
-    for row in test_rows:
-        result = classifier.classify(row["input_text"])
-        if result.status == "unsupported":
-            predictions.append(UNSUPPORTED_LABEL)
-        else:
-            predictions.append(result.document_type or "__uncertain__")
-    print(f"Test accuracy: {accuracy_score(expected, predictions):.3f}")
-    print(
-        classification_report(
-            expected,
-            predictions,
-            labels=sorted(set(expected) | set(predictions)),
-            zero_division=0,
+    for split_name, rows in (
+        ("Validation", validation_rows),
+        ("Test", test_rows),
+    ):
+        expected = [row["document_type"] for row in rows]
+        predictions = []
+        for row in rows:
+            result = classifier.classify(row["input_text"])
+            if result.status == "unsupported":
+                predictions.append(UNSUPPORTED_LABEL)
+            else:
+                predictions.append(result.document_type or "__uncertain__")
+        print(f"{split_name} accuracy: {accuracy_score(expected, predictions):.3f}")
+        print(
+            classification_report(
+                expected,
+                predictions,
+                labels=sorted(set(expected) | set(predictions)),
+                zero_division=0,
+            )
         )
-    )
 
     model_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(classifier.to_artifact(), model_path)
