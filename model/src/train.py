@@ -58,11 +58,18 @@ def train(
     train_rows = read_split(data_dir / "train.jsonl")
     validation_rows = read_split(data_dir / "validation.jsonl")
     test_rows = read_split(data_dir / "test.jsonl")
+    group_values = [row.get("case_group_id") for row in train_rows]
+    groups = None
+    if any(value is not None for value in group_values):
+        if not all(isinstance(value, str) and value for value in group_values):
+            raise ValueError("Training examples must all include case_group_id.")
+        groups = group_values
 
     classifier = DocumentClassifier.fit(
         [row["input_text"] for row in train_rows],
         [row["document_type"] for row in train_rows],
         min_confidence=min_confidence,
+        groups=groups,
     )
     for split_name, rows in (
         ("Validation", validation_rows),
@@ -76,7 +83,27 @@ def train(
                 predictions.append(UNSUPPORTED_LABEL)
             else:
                 predictions.append(result.document_type or "__uncertain__")
-        print(f"{split_name} accuracy: {accuracy_score(expected, predictions):.3f}")
+        correct_predictions = [
+            prediction == label
+            for prediction, label in zip(predictions, expected)
+        ]
+        print(
+            f"{split_name} accuracy: "
+            f"{accuracy_score(expected, predictions):.1%} "
+            f"({sum(correct_predictions)}/{len(rows)} correct)"
+        )
+        for data_type in ("regular", "augmented"):
+            matches = [
+                correct
+                for row, correct in zip(rows, correct_predictions)
+                if (row.get("case_variant", "regular") == "regular")
+                == (data_type == "regular")
+            ]
+            if matches:
+                print(
+                    f"  {data_type}: {sum(matches)}/{len(matches)} "
+                    f"({sum(matches) / len(matches):.1%})"
+                )
         print(
             classification_report(
                 expected,

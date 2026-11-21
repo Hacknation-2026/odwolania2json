@@ -89,6 +89,7 @@ class DocumentClassifier:
         texts: list[str],
         labels: list[str],
         min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+        groups: list[str] | None = None,
     ) -> DocumentClassifier:
         if len(texts) != len(labels):
             raise ValueError("Each training text must have exactly one label.")
@@ -98,6 +99,10 @@ class DocumentClassifier:
             raise ValueError("At least two document types are required for training.")
         if not texts or any(not text.strip() for text in texts):
             raise ValueError("Training texts must not be empty.")
+        if groups is not None and (
+            len(groups) != len(texts) or any(not group.strip() for group in groups)
+        ):
+            raise ValueError("Each training text must have a non-empty group label.")
         class_counts = Counter(labels)
         if any(count < 2 for count in class_counts.values()):
             raise ValueError(
@@ -108,15 +113,26 @@ class DocumentClassifier:
         model = build_model()
         model.fit(texts, labels)
         exemplar_features = model.named_steps["features"].transform(texts)
-        leave_one_out_similarities = cosine_similarity(exemplar_features)
-        np.fill_diagonal(leave_one_out_similarities, -1.0)
+        exemplar_similarities = cosine_similarity(exemplar_features)
+        group_labels = np.asarray(groups) if groups is not None else None
         exemplar_labels = np.asarray(labels)
         min_similarity_by_label = {}
         for label in class_counts:
             class_indexes = np.flatnonzero(exemplar_labels == label)
-            class_similarities = leave_one_out_similarities[
+            class_similarities = exemplar_similarities[
                 np.ix_(class_indexes, class_indexes)
-            ]
+            ].copy()
+            if group_labels is not None:
+                class_groups = group_labels[class_indexes]
+                if len(set(class_groups)) < 2:
+                    raise ValueError(
+                        "At least two training groups per document type are required "
+                        "to calibrate unknown-document rejection."
+                    )
+                same_group = class_groups[:, None] == class_groups[None, :]
+                class_similarities[same_group] = -1.0
+            else:
+                np.fill_diagonal(class_similarities, -1.0)
             nearest_similarities = class_similarities.max(axis=1)
             min_similarity_by_label[label] = max(
                 DEFAULT_MIN_SIMILARITY,

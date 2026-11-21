@@ -11,10 +11,14 @@ example. Predictions also need to be sufficiently similar to a labeled training
 example of the predicted class; this lets the classifier reject unrelated
 documents even when its probability for one known class is high. Low-confidence
 or dissimilar predictions are returned as uncertain instead of forcing a type.
+Similarity thresholds are calibrated across different base cases, so augmented
+versions of one case do not inflate the rejection threshold.
 
 Install dependencies and build the case-wise dataset splits. The default split
-randomly assigns 40 of the 60 case folders to training, 10 to validation, and
-10 to testing; all PDFs from a case stay together:
+randomly assigns 40 of the 60 base cases to training, 10 to validation, and 10
+to testing. Each split includes 5% of its available augmented folders: 4 of 80
+for training and 1 of 20 for each held-out split. The selected augmented
+folder is kept with its base case:
 
 ```bash
 python -m pip install -r requirements.txt
@@ -55,16 +59,21 @@ The converter extracts selectable text from labeled PDFs and creates JSONL
 training examples. Each PDF must have its matching JSON file beside it. A payment confirmation PDF named
 `potwierdzenie_przelewu.pdf` is paired with `przelew.json`.
 
-Put each case in its own folder under `model/data/raw/`, for example:
+Put each base case and its augmented variants in separate folders under
+`model/data/raw_augmented/`, for example:
 
 ```text
-model/data/raw/przyklad_01/
+model/data/raw_augmented/przyklad_01/
   odwolanie.pdf
   odwolanie.json
   pelnomocnictwo.pdf
   pelnomocnictwo.json
   potwierdzenie_przelewu.pdf
   przelew.json
+model/data/raw_augmented/przyklad_01_aug1/
+  ...
+model/data/raw_augmented/przyklad_01_aug2/
+  ...
 ```
 
 Run the converter from the repository root:
@@ -80,10 +89,13 @@ model/.venv/bin/python model/src/build_dataset.py --input-dir Model/Data
 ```
 
 The converter writes `train.jsonl`, `validation.jsonl`, and `test.jsonl` under
-`model/data/processed/`. The default ratios are 40/10/10 case folders for the
-60-folder dataset. The random assignment uses seed 42 and can be changed with
-`--seed`; ratios can be overridden with `--validation-ratio` and
-`--test-ratio`. All documents from a case stay in the same split.
+`model/data/processed/`. The default split produces 132 training examples and
+33 examples each for validation and test. Augmented folders are sampled
+separately within each split, while their base case families never cross
+splits. The augmentation fraction can be changed with `--augmentation-ratio`
+(default `0.05`). The random assignment uses seed 42 and can be changed with
+`--seed`; case ratios can be overridden with `--validation-ratio` and
+`--test-ratio`.
 Scanned PDFs without selectable text need OCR before conversion.
 
 ## Data Augmentation for Scanned Documents

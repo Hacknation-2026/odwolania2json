@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pymupdf
 
-from src.build_dataset import load_examples, split_by_case, write_splits
+from src.build_dataset import case_family, load_examples, split_by_case, write_splits
 
 
 def create_pdf(path: Path, text: str) -> None:
@@ -17,16 +17,38 @@ def create_pdf(path: Path, text: str) -> None:
 
 
 class BuildDatasetTests(unittest.TestCase):
-    def test_default_split_assigns_40_10_10_case_folders(self) -> None:
+    def test_augmented_folders_are_grouped_with_their_base_case(self) -> None:
+        self.assertEqual(
+            case_family(Path("przyklad_01_aug1")),
+            ("przyklad_01", "aug1"),
+        )
+        self.assertEqual(
+            case_family(Path("przyklad_01_aug2")),
+            ("przyklad_01", "aug2"),
+        )
+        self.assertEqual(
+            case_family(Path("przyklad_01")),
+            ("przyklad_01", "regular"),
+        )
+
+    def test_default_split_samples_five_percent_of_augmented_folders_per_split(
+        self,
+    ) -> None:
         examples = [
-            {"case_id": f"case_{case_number:02}", "document": document_number}
+            {
+                "case_id": f"case_{case_number:02}_{variant}",
+                "case_group_id": f"case_{case_number:02}",
+                "case_variant": variant,
+                "document": document_number,
+            }
             for case_number in range(60)
+            for variant in ("regular", "aug1", "aug2")
             for document_number in range(3)
         ]
 
         splits = split_by_case(examples, seed=42)
         case_counts = {
-            split_name: len({example["case_id"] for example in split_examples})
+            split_name: len({example["case_group_id"] for example in split_examples})
             for split_name, split_examples in splits.items()
         }
 
@@ -36,8 +58,28 @@ class BuildDatasetTests(unittest.TestCase):
         )
         self.assertEqual(
             {name: len(rows) for name, rows in splits.items()},
-            {"train": 120, "validation": 30, "test": 30},
+            {"train": 132, "validation": 33, "test": 33},
         )
+        expected_augmented_folders = {"train": 4, "validation": 1, "test": 1}
+        for split_name, split_examples in splits.items():
+            augmented_examples = [
+                example
+                for example in split_examples
+                if example["case_variant"] != "regular"
+            ]
+            self.assertEqual(
+                len({example["case_id"] for example in augmented_examples}),
+                expected_augmented_folders[split_name],
+            )
+            self.assertEqual(len(augmented_examples) % 3, 0)
+
+        split_families = {
+            name: {example["case_group_id"] for example in rows}
+            for name, rows in splits.items()
+        }
+        self.assertFalse(split_families["train"] & split_families["validation"])
+        self.assertFalse(split_families["train"] & split_families["test"])
+        self.assertFalse(split_families["validation"] & split_families["test"])
 
     def test_pairs_documents_and_splits_by_case(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -83,6 +125,7 @@ class BuildDatasetTests(unittest.TestCase):
                 if example["pdf_path"].endswith("notice.pdf")
             )
             self.assertEqual(negative_example["document_type"], "__unsupported__")
+            self.assertEqual(negative_example["case_variant"], "regular")
 
             splits = split_by_case(examples, 0.1, 0.1, seed=7)
             cases_by_split = {

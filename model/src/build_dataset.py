@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -15,10 +16,12 @@ except ImportError:
 
 
 MODEL_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_INPUT_DIR = MODEL_DIR / "data" / "raw"
+DEFAULT_INPUT_DIR = MODEL_DIR / "data" / "raw_augmented"
 DEFAULT_OUTPUT_DIR = MODEL_DIR / "data" / "processed"
 DEFAULT_VALIDATION_RATIO = 1 / 6
 DEFAULT_TEST_RATIO = 1 / 6
+DEFAULT_AUGMENTATION_RATIO = 0.05
+AUGMENTED_CASE_SUFFIX = re.compile(r"^(?P<base>.+)_(?P<variant>aug[12])$", re.I)
 LABEL_FILENAME_BY_PDF = {
     "potwierdzenie_przelewu.pdf": "przelew.json",
 }
@@ -37,6 +40,14 @@ def extract_pdf_text(pdf_path: Path) -> str:
             f"No selectable text found in {pdf_path}; scanned PDFs need OCR first."
         )
     return text
+
+
+def case_family(case_path: Path) -> tuple[str, str]:
+    match = AUGMENTED_CASE_SUFFIX.fullmatch(case_path.name)
+    if not match:
+        return case_path.as_posix(), "regular"
+    family_path = case_path.with_name(match.group("base"))
+    return family_path.as_posix(), match.group("variant").lower()
 
 
 def load_examples(input_dir: Path) -> list[dict[str, Any]]:
@@ -76,9 +87,12 @@ def load_examples(input_dir: Path) -> list[dict[str, Any]]:
             if relative_case_path != Path(".")
             else pdf_path.stem
         )
+        case_group_id, case_variant = case_family(Path(case_id))
         examples.append(
             {
                 "case_id": case_id,
+                "case_group_id": case_group_id,
+                "case_variant": case_variant,
                 "document_type": (
                     UNSUPPORTED_LABEL if not target else label_path.stem
                 ),
@@ -95,38 +109,91 @@ def split_by_case(
     validation_ratio: float = DEFAULT_VALIDATION_RATIO,
     test_ratio: float = DEFAULT_TEST_RATIO,
     seed: int = 42,
+    augmentation_ratio: float = DEFAULT_AUGMENTATION_RATIO,
 ) -> dict[str, list[dict[str, Any]]]:
     if validation_ratio <= 0 or test_ratio <= 0:
         raise ValueError("Validation and test ratios must both be greater than zero.")
     if validation_ratio + test_ratio >= 1:
         raise ValueError("Validation and test ratios must add up to less than one.")
+    if not 0 <= augmentation_ratio <= 1:
+        raise ValueError("Augmentation ratio must be between 0 and 1.")
 
-    case_ids = sorted({example["case_id"] for example in examples})
-    if len(case_ids) < 3:
+    case_group_ids = sorted(
+        {example.get("case_group_id", example["case_id"]) for example in examples}
+    )
+    if len(case_group_ids) < 3:
         raise ValueError(
             "At least three case folders are required to create train, validation, "
             "and test splits."
         )
 
-    random.Random(seed).shuffle(case_ids)
-    validation_count = max(1, round(len(case_ids) * validation_ratio))
-    test_count = max(1, round(len(case_ids) * test_ratio))
-    if validation_count + test_count >= len(case_ids):
+    rng = random.Random(seed)
+    rng.shuffle(case_group_ids)
+    validation_count = max(1, round(len(case_group_ids) * validation_ratio))
+    test_count = max(1, round(len(case_group_ids) * test_ratio))
+    if validation_count + test_count >= len(case_group_ids):
         raise ValueError(
             "Not enough case folders for these split ratios; reduce the ratios "
             "or add more cases."
         )
 
-    validation_cases = set(case_ids[:validation_count])
-    test_cases = set(case_ids[validation_count : validation_count + test_count])
-    train_cases = set(case_ids[validation_count + test_count :])
+    validation_cases = set(case_group_ids[:validation_count])
+    test_cases = set(
+        case_group_ids[validation_count : validation_count + test_count]
+    )
+    train_cases = set(case_group_ids[validation_count + test_count :])
+
+    def split_examples(group_ids: set[str]) -> list[dict[str, Any]]:
+        augmented_folders_by_group: dict[str, set[str]] = {}
+        for example in examples:
+            group_id = example.get("case_group_id", example["case_id"])
+            if (
+                group_id in group_ids
+                and example.get("case_variant", "regular") != "regular"
+            ):
+                augmented_folders_by_group.setdefault(group_id, set()).add(
+                    example["case_id"]
+                )
+
+        augmented_folders = {
+            case_id
+            for case_ids in augmented_folders_by_group.values()
+            for case_id in case_ids
+        }
+        augmented_folder_count = round(len(augmented_folders) * augmentation_ratio)
+        group_options = list(augmented_folders_by_group.items())
+        rng.shuffle(group_options)
+
+        selected_augmented_folders = set()
+        for _, case_ids in group_options:
+            if len(selected_augmented_folders) >= augmented_folder_count:
+                break
+            options = sorted(case_ids)
+            rng.shuffle(options)
+            selected_augmented_folders.add(options[0])
+
+        remaining_folders = list(augmented_folders - selected_augmented_folders)
+        rng.shuffle(remaining_folders)
+        selected_augmented_folders.update(
+            remaining_folders[
+                : augmented_folder_count - len(selected_augmented_folders)
+            ]
+        )
+
+        return [
+            example
+            for example in examples
+            if example.get("case_group_id", example["case_id"]) in group_ids
+            and (
+                example.get("case_variant", "regular") == "regular"
+                or example["case_id"] in selected_augmented_folders
+            )
+        ]
 
     return {
-        "train": [example for example in examples if example["case_id"] in train_cases],
-        "validation": [
-            example for example in examples if example["case_id"] in validation_cases
-        ],
-        "test": [example for example in examples if example["case_id"] in test_cases],
+        "train": split_examples(train_cases),
+        "validation": split_examples(validation_cases),
+        "test": split_examples(test_cases),
     }
 
 
@@ -164,6 +231,12 @@ def main() -> None:
         "--validation-ratio", type=float, default=DEFAULT_VALIDATION_RATIO
     )
     parser.add_argument("--test-ratio", type=float, default=DEFAULT_TEST_RATIO)
+    parser.add_argument(
+        "--augmentation-ratio",
+        type=float,
+        default=DEFAULT_AUGMENTATION_RATIO,
+        help="Fraction of augmented folders included within each split (0 to 1).",
+    )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -174,6 +247,7 @@ def main() -> None:
             validation_ratio=args.validation_ratio,
             test_ratio=args.test_ratio,
             seed=args.seed,
+            augmentation_ratio=args.augmentation_ratio,
         )
         write_splits(splits, args.output_dir)
     except (FileNotFoundError, NotADirectoryError, ValueError) as error:

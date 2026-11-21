@@ -116,6 +116,32 @@ class DocumentClassifierTests(unittest.TestCase):
         self.assertEqual(result.status, "uncertain")
         self.assertLess(result.nearest_example_similarity, 0.2)
 
+    def test_similarity_calibration_excludes_same_group_augmentations(self) -> None:
+        texts = [
+            "appeal common appeal text base alpha",
+            "appeal common appeal text base alpha variation one",
+            "appeal common appeal text base alpha variation two",
+            "appeal common appeal text base beta",
+            "appeal common appeal text base beta variation one",
+            "appeal common appeal text base beta variation two",
+            "payment common transfer text base alpha",
+            "payment common transfer text base alpha variation one",
+            "payment common transfer text base alpha variation two",
+            "payment common transfer text base beta",
+            "payment common transfer text base beta variation one",
+            "payment common transfer text base beta variation two",
+        ]
+        labels = ["appeal"] * 6 + ["payment"] * 6
+        groups = ["alpha"] * 3 + ["beta"] * 3 + ["alpha"] * 3 + ["beta"] * 3
+
+        per_document_calibration = DocumentClassifier.fit(texts, labels)
+        per_case_calibration = DocumentClassifier.fit(texts, labels, groups=groups)
+
+        self.assertLess(
+            per_case_calibration.min_similarity_by_label["appeal"],
+            per_document_calibration.min_similarity_by_label["appeal"],
+        )
+
     def test_training_saves_loadable_model_and_prints_test_score(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -156,9 +182,12 @@ class DocumentClassifierTests(unittest.TestCase):
                 )
 
             model_path = root / "model.joblib"
-            train(data_dir, model_path, min_confidence=0.0)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                train(data_dir, model_path, min_confidence=0.0)
 
             self.assertEqual(len(load_classifier(model_path).model.classes_), 3)
+            self.assertIn("Test accuracy: 100.0% (3/3 correct)", stdout.getvalue())
 
     def test_pdf_paths_rejects_non_pdf_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
