@@ -21,3 +21,6 @@ output/*
 # srodowisko przygotowane przez tools\setup.bat
 tools/uv/
 tools/python/
+
+# inne
+.claude/
