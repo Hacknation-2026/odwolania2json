@@ -1,72 +1,43 @@
 # odwolania2json
-Urząd Zamówień Publicznych - Odwołania2JSON
 
-## Train the document classifier
+Urząd Zamówień Publicznych – Odwołania2json (HackNation 2026).
+Rozpoznaje dokumenty ze sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, potwierdzenie przelewu) i zapisuje dla każdego PDF-a JSON w [modelu UZP](https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026/tree/main/oczekiwane-json). Dokumenty spoza tych klas dostają pusty plik `.json`.
 
-The classifier learns document types from the PDF text and paired JSON labels.
-It uses word and character TF-IDF features with logistic regression, which can
-be trained locally on the provided small dataset. PDF filenames are not model
-features. An empty `{}` annotation is learned as an unsupported-document
-example. Predictions also need to be sufficiently similar to a labeled training
-example of the predicted class; this lets the classifier reject unrelated
-documents even when its probability for one known class is high. Low-confidence
-or dissimilar predictions are returned as uncertain instead of forcing a type.
+**Pipeline:** PDF → tekst (pypdfium2, OCR RapidOCR dla skanów) → klasyfikacja typu (lokalny model TF-IDF + regresja logistyczna, CPU, ~4 MB) → ekstrakcja pól wg szablonu z YAML (LLM + JSON Schema) → normalizacja → JSON. Klasyfikacja działa w pełni lokalnie; dokumenty odrzucone przez klasyfikator nie trafiają do LLM.
 
-Install dependencies and build the case-wise dataset splits:
+**Stack (tylko open source):** Python 3.13, pypdfium2, RapidOCR/ONNX Runtime (CPU), scikit-learn, FastAPI, model open-weight przez API zgodne z OpenAI – tymczasowo OpenRouter z darmowym modelem (placeholder; docelowo dostawca z serwerami w UE/EOG, model do wyboru).
 
-```bash
-python -m pip install -r requirements.txt
-python model/src/build_dataset.py
-```
+## Uruchomienie
 
-Train and evaluate the model on the held-out test split:
+1. Skopiuj `.env.example` do `.env` i wpisz `LLM_API_KEY`.
+2. Wrzuć sprawy do `input/` (np. `input/case1/*.pdf`).
+3. Uruchom `start.bat` – wyniki w `output/case1/<nazwa>.json`, ślad przetwarzania w `logs/`.
 
-```bash
-python model/src/train.py
-```
+GUI: `start_gui.bat` – sam otwiera przeglądarkę (domyślnie http://localhost:8765, przy zajętym porcie kolejny wolny; Swagger: `/docs`). Opcjonalnie Docker: `docker compose up --build`.
 
-Classify a PDF or recursively classify all PDFs in a folder:
+## Struktura
 
-```bash
-python model/src/predict.py input/example.pdf
-python model/src/predict.py input/
-```
+- `backend/app/` – kod (CLI `app.cli`, API `app.main`, pipeline)
+- `backend/config/classes/` – klasy dokumentów: nazwa, opis + szablon wyjściowego JSON-a
+- `backend/config/dictionaries/` – słowniki (np. `czynnosc_powod`)
+- `model/` – wytrenowany klasyfikator typu dokumentu (kod: `backend/app/text_model.py`, trening: `train.bat`)
+- `frontend/` – strona do wgrywania PDF-ów
+- `input/`, `output/` – foldery wymagane przez UZP
 
-The classifier artifact is saved to `model/models/document_classifier.joblib`.
-Predictions are printed as JSON Lines with the document type, confidence,
-similarity to the nearest labeled example, and status (`classified`,
-`unsupported`, or `uncertain`).
+## Nowa klasa dokumentu
 
-## Build PDF-to-JSON training data
+Bez zmian w kodzie:
+1. Dodaj plik YAML w `backend/config/classes/` (opis + szablon wyjściowego JSON-a). Wzór: [odwolanie.yaml](backend/config/classes/odwolanie.yaml).
+2. Wrzuć kilka przykładowych PDF-ów do `training/<nazwa klasy>/` (albo w układzie UZP: PDF + oczekiwany JSON obok). Inne dokumenty, które mają być odrzucane, do `training/brak/`.
+3. Uruchom `train.bat` – trening trwa około minuty na CPU; przed zapisem modelu wypisuje wynik walidacji krzyżowej (całe sprawy odłożone).
 
-The converter extracts selectable text from labeled PDFs and creates JSONL
-training examples. Each PDF must have its matching JSON file beside it. A payment confirmation PDF named
-`potwierdzenie_przelewu.pdf` is paired with `przelew.json`.
+Klasyfikator patrzy na początek dokumentu (1. strona, kolejne gdy jest mało tekstu) i ignoruje polskie znaki, bo OCR często je gubi.
 
-Put each case in its own folder under `model/data/raw/`, for example:
-
-```text
-model/data/raw/przyklad_01/
-  odwolanie.pdf
-  odwolanie.json
-  pelnomocnictwo.pdf
-  pelnomocnictwo.json
-  potwierdzenie_przelewu.pdf
-  przelew.json
-```
-
-Run the converter from the repository root:
+## Testy i ewaluacja
 
 ```bash
-model/.venv/bin/python model/src/build_dataset.py
+git clone https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026 data/hacknation-2026
+cd backend && ..\.venv\Scripts\python -m pytest
+..\.venv\Scripts\python -m app.cli --input ../data/hacknation-2026/dane --output ../output/dane
+..\.venv\Scripts\python scripts/evaluate.py --gold ../data/hacknation-2026/dane --pred ../output/dane
 ```
-
-To use PDFs stored elsewhere, pass their parent directory explicitly:
-
-```bash
-model/.venv/bin/python model/src/build_dataset.py --input-dir Model/Data
-```
-
-The converter writes `train.jsonl`, `validation.jsonl`, and `test.jsonl` under
-`model/data/processed/`. All documents from a case stay in the same split.
-Scanned PDFs without selectable text need OCR before conversion.

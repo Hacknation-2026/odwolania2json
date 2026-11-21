@@ -1,0 +1,15 @@
+# Klasa dokumentu: potwierdzenie przelewu (zgodne z oczekiwane-json/przelew.json).
+name: przelew
+label: Potwierdzenie przelewu
+description: >
+  Potwierdzenie wykonania przelewu bankowego (np. wpis od odwołania na rachunek UZP,
+  opłata skarbowa od pełnomocnictwa). Zawiera rachunki, kwotę, tytuł i datę operacji.
+max_pages: 1
+output:
+  przelew_bankowy:
+    data_operacji: {type: date, description: "Data wykonania operacji."}
+    kwota: {type: number, description: "Kwota przelewu jako liczba (np. 10000.00)."}
+    na_rachunek: {type: string, normalize: digits, description: "Numer rachunku odbiorcy (bez PL i spacji)."}
+    numer_transakcji: {type: string, description: "Numer / identyfikator transakcji, jeśli podany."}
+    tytul: {type: string, description: "Tytuł przelewu, przepisany dosłownie."}
+    z_rachunku: {type: string, normalize: digits, description: "Numer rachunku nadawcy (bez PL i spacji)."}

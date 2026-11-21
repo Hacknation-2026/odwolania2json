@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+
+# dane UZP (klon repo) i wyniki
+data/
+logs/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
