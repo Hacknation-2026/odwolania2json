@@ -928,6 +928,16 @@ def _date_after_label(text: str) -> str | None:
         match = re.search(_DATE_PATTERN, text[label.end() : label.end() + 180], re.I)
         if match:
             return _parse_date(match.group())
+    # scanned bank forms: "Data\n2026-03-26\nwykonania", "Data operaci\n...", "data wykonania\n20 04 2026"
+    for pattern in (
+        r"(?im)^\s*Data\s*\n\s*(\d{4}-\d{2}-\d{2})\s*\n\s*(?:wykonania|operac\w*|realizacji)\b",
+        r"(?i)\bdata\s+(?:wykonania|operac\w*|realizacji)\b[^\d]{0,80}?(\d{4}-\d{2}-\d{2}|\d{1,2}[ .]\d{2}[ .]\d{4})",
+    ):
+        match = re.search(pattern, text)
+        if match:
+            value = re.sub(r"^(\d{1,2})[ .](\d{2})[ .](\d{4})$", r"\3-\2-\1", match.group(1))
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                return value
     return None
 
 
@@ -936,7 +946,8 @@ def _amount(text: str) -> float | None:
         r"(?i)\b(?:kwota(?:\s+(?:operacji|przelewu|transakcji))?|"
         r"wartość|w\s+kwocie)\b"
     )
-    number = re.compile(r"(?<!\d)(\d+(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)(?!\d)")
+    # not glued to letters: "CEN9057564440515" is a transaction id, not an amount
+    number = re.compile(r"(?<![\w.,])(\d+(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?)(?![\w])")
     lines = _lines(text)
     for index, line in enumerate(lines):
         match = label.search(line)
@@ -946,9 +957,12 @@ def _amount(text: str) -> float | None:
         for candidate in candidates:
             number_match = number.search(candidate)
             if number_match:
-                value = re.sub(r"\s", "", number_match.group(1))
-                return _to_float(value)
-    return None
+                value = _to_float(re.sub(r"\s", "", number_match.group(1)))
+                if value is not None and value < 100_000_000:
+                    return value
+    # amount with currency anywhere, e.g. "-17,00 PLN" in a statement table
+    currency = re.search(r"(?<![\w.,])-?\s?(\d{1,3}(?:[ \u00a0]?\d{3})*[.,]\d{2})\s*(?:PLN|z\u0142)\b", text)
+    return _to_float(re.sub(r"\s", "", currency.group(1))) if currency else None
 
 
 def _to_float(value: str) -> float | None:
@@ -996,7 +1010,7 @@ def _account_after_labels(
 def _payment_title(text: str) -> str | None:
     lines = _lines(text)
     label_pattern = re.compile(
-        r"^(?:tytuł(?:em)?(?:\s+(?:przelewu|transakcji|operacji|płatności))?|"
+        r"^(?:tytu[łl]?(?:em)?(?:\s+(?:przelewu|transakcji|operacji|płatności))?|"
         r"opis(?:\s+(?:operacji|transakcji))?)"
         r"\s*:?\s*(.*)$",
         re.I,
@@ -1032,9 +1046,11 @@ def extract_przelew(text: str) -> dict[str, Any]:
         r"(?i)\b(?:numer\s+referencyjny(?:\s+operacji)?|"
         r"numer\s+transakcji(?:\s+operacji)?|"
         r"nr\s+ref\.?(?:\s+operacji)?)\s*[:.]?\s*"
-        r"([A-Z0-9][A-Z0-9/-]{5,})",
+        r"(?=[A-Z/-]*\d)([A-Z0-9][A-Z0-9/-]{5,})",  # must contain a digit (not the word "transakcji")
         flat,
     )
+    if not reference_match:  # scanned form: "Numer\n305494\ntransakcji"
+        reference_match = re.search(r"(?im)^\s*Numer\s*\n\s*([A-Z0-9/-]*\d[A-Z0-9/-]*)\s*\n\s*transakcji\b", text)
     if not reference_match:
         reference_match = re.search(r"\b(CEN[A-Z0-9-]{8,})\b", flat, re.IGNORECASE)
     sender = _account_after_labels(

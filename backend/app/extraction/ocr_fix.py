@@ -31,6 +31,7 @@ def skeleton(word: str) -> str:
 def lexicon() -> tuple[frozenset[str], dict[str, str]]:
     """(known words, skeleton -> most frequent word with that skeleton)."""
     known: set[str] = set()
+    counts: dict[str, int] = {}
     best: dict[str, tuple[int, str]] = {}
     for path in sorted((get_settings().config_dir / "lexicon").glob("*.txt")):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -39,9 +40,16 @@ def lexicon() -> tuple[frozenset[str], dict[str, str]]:
             word, _, count = line.partition("\t")
             n = int(count or 1)
             known.add(word)
+            counts[word] = counts.get(word, 0) + n
             key = skeleton(word)
             if key not in best or n > best[key][0]:
                 best[key] = (n, word)
+    # a stripped spelling ("odwolania") that is much rarer than the Polish one ("odwołania")
+    # comes from broken source text - treat it as unknown so it gets repaired
+    for word in list(known):
+        n, best_word = best[skeleton(word)]
+        if word == skeleton(word) and best_word != word and n >= 2 * counts[word]:
+            known.discard(word)
     return frozenset(known), {key: word for key, (_, word) in best.items()}
 
 

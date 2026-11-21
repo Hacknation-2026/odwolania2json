@@ -187,3 +187,36 @@ Dokument podpisany przez Zbigniew Cieślak
         self.assertEqual((principal["data"]["krs"], principal["data"]["nip"]), ("9991919038", "9992326754"))
         self.assertEqual(principal["podpisujacy"], [{"imie_nazwisko": "Zbigniew Cieślak"}])
         self.assertEqual([p["imie_nazwisko"] for p in result["pelnomocnicy"]], ["Grzegorz Kaczmarek", "Katarzyna Sikora"])
+
+
+class RealScanTransferTests(unittest.TestCase):
+    def test_two_line_labels_of_a_scanned_bank_form(self) -> None:
+        result = extract_document_fields(
+            "przelew",
+            """Bank Mazurski
+Z rachunku
+68 1090 1505 1005 2441 7124 3731
+Na rachunek
+60 1010 1010 0081 3622 3100 0000
+Tytułem
+Wpis od odwołania, ZP/12/2026, REGIONALNE CENTRUM ZDROWIA
+PUBLICZNEGO W DĘBNICY GÓRNEJ
+Kwota
+10 000,00 PLN
+przelewu
+Data
+2026-03-26
+wykonania
+Numer
+305494
+transakcji
+""",
+        )["przelew_bankowy"]
+        self.assertEqual(result["kwota"], 10000.0)
+        self.assertEqual(result["data_operacji"], "2026-03-26")
+        self.assertEqual(result["numer_transakcji"], "305494")
+        self.assertEqual(result["tytul"], "Wpis od odwołania, ZP/12/2026, REGIONALNE CENTRUM ZDROWIA PUBLICZNEGO W DĘBNICY GÓRNEJ")
+
+    def test_transaction_id_is_not_an_amount(self) -> None:
+        result = extract_document_fields("przelew", "Kwota: CEN9057564440515\nKwota operacji -7 500,00 PLN")["przelew_bankowy"]
+        self.assertEqual(result["kwota"], 7500.0)
