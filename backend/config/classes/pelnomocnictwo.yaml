@@ -1,0 +1,25 @@
+# Klasa dokumentu: pełnomocnictwo (zgodne z oczekiwane-json/pelnomocnictwo.json).
+name: pelnomocnictwo
+label: Pełnomocnictwo
+description: >
+  Pełnomocnictwo - dokument, w którym mocodawca (wykonawca, np. spółka lub konsorcjum) umocowuje
+  wskazane osoby do reprezentowania go, np. w postępowaniu odwoławczym przed KIO.
+keywords: [PEŁNOMOCNICTWO, udzielam, upoważniam, umocowanie, mocodawca, pełnomocnik]
+max_pages: 2
+instructions: >
+  Mocodawców może być kilku (konsorcjum udzielające pełnomocnictwa wspólnie).
+  Imiona i nazwiska podawaj w mianowniku, bez tytułów.
+
+output:
+  mocodawca:
+    - data:
+        imie_nazwisko: {type: string, description: "Imię i nazwisko mocodawcy, jeśli jest osobą fizyczną; dla osoby prawnej null."}
+        krs: {type: string, normalize: krs, description: "KRS mocodawcy (osoba prawna)."}
+        nazwa: {type: string, description: "Pełna nazwa mocodawcy."}
+        nip: {type: string, normalize: digits, description: "NIP mocodawcy."}
+        typ: {type: string, enum: [osoba_prawna, osoba_fizyczna], description: "Typ mocodawcy."}
+      podpisujacy:
+        - imie_nazwisko: {type: string, description: "Osoba podpisująca w imieniu mocodawcy."}
+  pelnomocnicy:
+    - imie_nazwisko: {type: string, description: "Imię i nazwisko pełnomocnika w mianowniku."}
+      pesel: {type: string, normalize: digits, description: "PESEL pełnomocnika, jeśli podany."}

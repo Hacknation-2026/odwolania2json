@@ -8,3 +8,11 @@ venv/
 .ruff_cache/
 output/
 model/data/raw_augmented/*
+
+# dane UZP (klon repo) i wyniki
+data/
+logs/
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep

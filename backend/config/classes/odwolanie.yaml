@@ -1,0 +1,43 @@
+# Klasa dokumentu: odwołanie do KIO.
+# `output` to szablon wynikowego JSON-a (zgodny z oczekiwane-json/odwolanie.json).
+# Liść = {type, description, [normalize], [dictionary], [derive]}; lista z jednym elementem = tablica obiektów.
+name: odwolanie
+label: Odwołanie do KIO
+description: >
+  Odwołanie wnoszone przez wykonawcę do Prezesa Krajowej Izby Odwoławczej wobec czynności
+  lub zaniechania zamawiającego w postępowaniu o udzielenie zamówienia publicznego.
+  Zawiera sekcje Odwołujący / Zamawiający, zarzuty i żądania.
+keywords: [ODWOŁANIE, Krajowej Izby Odwoławczej, Odwołujący, Zamawiający, zarzucam, wnoszę o]
+max_pages: 4
+instructions: >
+  Odwołujący to wykonawca wnoszący odwołanie (przy konsorcjum: Lider). Zamawiający to podmiot
+  prowadzący postępowanie. Pełnomocnik to osoba reprezentująca Odwołującego (np. adwokat, radca prawny).
+
+output:
+  OdwolanieKIO:
+    data: {type: date, description: "Data z nagłówka pierwszej strony (np. 'Gdańsk, dnia 3 września 2026'). Brak daty w nagłówku -> null."}
+    czynnosc_dzien: {type: date, description: "Data czynności zamawiającego zaskarżonej w PIERWSZYM zarzucie (od niej biegnie termin na odwołanie). Brak wiarygodnej daty -> null."}
+    czynnosc_powod_id: {type: integer, dictionary: czynnosc_powod, description: "Powód odwołania ustalony WYŁĄCZNIE na podstawie pierwszego zarzutu."}
+    czynnosc_opis: {type: string, derive: {from: czynnosc_powod_id, dictionary: czynnosc_powod}, description: "Opis z słownika dla czynnosc_powod_id."}
+    miejscowosc: {type: string, description: "Miejscowość z nagłówka pierwszej strony, z linii 'X, dnia ...' lub 'X DD.MM.RRRR'."}
+  Odwolujacy:
+    - krs: {type: string, normalize: krs, description: "KRS Odwołującego (Lidera konsorcjum)."}
+      nazwa: {type: string, description: "Pełna nazwa Odwołującego (przy konsorcjum: nazwa Lidera)."}
+      nip: {type: string, normalize: digits, description: "NIP Odwołującego."}
+      regon: {type: string, normalize: digits, description: "REGON Odwołującego."}
+      przez-pelnomocnika: {type: integer, enum: [0, 1], description: "1 jeśli Odwołujący działa przez pełnomocnika, inaczej 0."}
+      pelnomocnik:
+        imie_nazwisko: {type: string, description: "Imię i nazwisko pierwszego pełnomocnika Odwołującego (bez tytułów typu adw., r.pr.)."}
+        nazwa: {type: string, description: "Nazwa podmiotu zatrudniającego pełnomocnika (kancelaria)."}
+        mail: {type: string, description: "Adres e-mail kontaktowy pełnomocnika."}
+  Zamawiajacy:
+    - krs: {type: string, normalize: krs, description: "KRS Zamawiającego (tylko jeśli jawnie podany)."}
+      nazwa: {type: string, description: "Pełna nazwa Zamawiającego."}
+      nip: {type: string, normalize: digits, description: "NIP Zamawiającego (tylko jeśli jawnie podany)."}
+      regon: {type: string, normalize: digits, description: "REGON Zamawiającego (tylko jeśli jawnie podany)."}
+      prowadzacy_postepowanie: {type: integer, enum: [0, 1], description: "null gdy jeden zamawiający; przy wielu: 1 dla prowadzącego/lidera postępowania, 0 dla pozostałych."}
+  ZamowieniePubliczne:
+    numer_bzp: {type: string, normalize: bzp, description: "Numer ogłoszenia w BZP, format 'YYYY/BZP ########'. Nie wpisuj tu numeru TED."}
+    numer_postepowania: {type: string, description: "Numer referencyjny / znak postępowania, np. 'ZP.039.2025', 'DZP.260.11.2025'."}
+    numer_ted: {type: string, normalize: ted, description: "Numer ogłoszenia TED, np. '363730-2025' lub '2025/S 123-363730'."}
+    tytul: {type: string, description: "Tytuł / nazwa zamówienia, bez cudzysłowów."}
