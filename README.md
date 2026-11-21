@@ -85,3 +85,42 @@ The converter writes `train.jsonl`, `validation.jsonl`, and `test.jsonl` under
 `--seed`; ratios can be overridden with `--validation-ratio` and
 `--test-ratio`. All documents from a case stay in the same split.
 Scanned PDFs without selectable text need OCR before conversion.
+
+## Data Augmentation for Scanned Documents
+
+To expand the training set from the initial 150 documents and prevent overfitting to clean, synthetic PDF layouts, a realistic scanner degradation engine is provided in `model/src/augment.py`. It converts pristine PDFs into degraded scanned PDF representations while preserving paired JSON annotations.
+
+### Degradation Effects
+
+- **Photometric Variations**: Brightness scaling (underexposed/dark to washed out), low/high contrast, uneven lighting and shadow gradients (scanner lid gaps, hand/mobile shadows).
+- **Geometric & Orientation Distortions**: 180° page flips (common in Automatic Document Feeder scans), 90°/270° orientation mismatch, slight skew angles (±0.5° to ±4°).
+- **Physical & Sensor Artifacts**: Salt-and-pepper noise (dust on glass platen), vertical scanner slit streaks, Gaussian defocus blur, paper background tinting, and JPEG compression artifacts.
+- **Searchable PDF Compliance**: Input is `.pdf` and output remains a valid `.pdf` embedding a searchable text layer and optional simulated OCR misreadings.
+
+### Usage
+
+Augment a single PDF:
+
+```bash
+model/.venv/bin/python model/src/augment.py --input-file model/data/raw/przyklad_01/odwolanie.pdf --output distorted.pdf
+```
+
+Augment a single case folder:
+
+```bash
+model/.venv/bin/python model/src/augment.py --case-dir model/data/raw/przyklad_01 --output-dir model/data/raw/przyklad_01_aug1
+```
+
+Augment the entire dataset (creates augmented variants `przyklad_XX_aug1`, `przyklad_XX_aug2`, etc.):
+
+```bash
+model/.venv/bin/python model/src/augment.py --dataset-dir model/data/raw --output-dir model/data/raw_augmented --copies 2 --preset realistic
+```
+
+Then rebuild the dataset splits from the augmented data:
+
+```bash
+model/.venv/bin/python model/src/build_dataset.py --input-dir model/data/raw_augmented
+model/.venv/bin/python model/src/train.py
+```
+
