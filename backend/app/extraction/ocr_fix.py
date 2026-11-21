@@ -89,8 +89,12 @@ def _upper_reference(match: re.Match) -> str:
     return token.upper()
 
 
+REGISTRY_LABEL = re.compile(r"\b(?:N[1lI]P|KR[5S]|REG[0O]N)\b")  # "N1P:" -> "NIP:"
+
+
 def fix_text(text: str) -> str:
-    text = text.replace("ž", "ż").replace("Ž", "Ż")
+    text = text.replace("ž", "ż").replace("Ž", "Ż").replace("ç", "ę").replace("Ç", "Ę")
+    text = REGISTRY_LABEL.sub(lambda m: {"N": "NIP", "K": "KRS", "R": "REGON"}[m.group()[0]], text)
     text = COMPANY_FORM.sub(lambda m: m.group(1) + "o.o.", text)
     text = REFERENCE.sub(_upper_reference, text)
     text = AMOUNT_ZL.sub(lambda m: m.group(1) + "zł", text)

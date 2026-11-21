@@ -163,3 +163,27 @@ został poinformowany pismem z 1 kwietnia 2026 roku;
         self.assertEqual([b["nazwa"] for b in buyers], ["Zarząd Dróg Powiatowych w Brzozowcu", "Zakład Gospodarki Komunalnej w Zielonkowie"])
         self.assertEqual([b["prowadzacy_postepowanie"] for b in buyers], [1, 0])
         self.assertEqual(buyers[0]["nip"], "9992398073")
+
+
+class RealScanPowerOfAttorneyTests(unittest.TestCase):
+    def test_grant_list_representation_and_esignature_noise(self) -> None:
+        result = extract_document_fields(
+            "pelnomocnictwo",
+            """Gdańsk, 27.03.2026 r.
+PEŁNOMOCNICTWO
+Medicor IT Solutions S.A. z siedzibą w Gdańsk (80-386), ul. Marszałkowska 37, wpisana do
+rejestru przedsiębiorców Krajowego Rejestru Sądowego pod numerem KRS: 9991919038, NIP:
+999-232-67-54, REGON: 999749508, reprezentowana przez: Zbigniew Cieślak – Prokurent (dalej:
+„Mocodawca”), niniejszym udziela pełnomocnictwa:
+Grzegorz Kaczmarek (adwokat, nr wpisu PO-17476) oraz KATARZYNA SIKORA (radca prawny, nr
+wpisu WR-12316),
+do reprezentowania Mocodawcy w sprawie dotyczącej środków ochrony prawnej.
+Signature Not Verified
+Dokument podpisany przez Zbigniew Cieślak
+""",
+        )
+        principal = result["mocodawca"][0]
+        self.assertEqual(principal["data"]["nazwa"], "Medicor IT Solutions S.A.")
+        self.assertEqual((principal["data"]["krs"], principal["data"]["nip"]), ("9991919038", "9992326754"))
+        self.assertEqual(principal["podpisujacy"], [{"imie_nazwisko": "Zbigniew Cieślak"}])
+        self.assertEqual([p["imie_nazwisko"] for p in result["pelnomocnicy"]], ["Grzegorz Kaczmarek", "Katarzyna Sikora"])

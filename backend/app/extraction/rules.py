@@ -296,9 +296,9 @@ def _entity_name(block: str) -> str | None:
     return None
 
 
-def _registry(block: str) -> dict[str, str | None]:
+def _registry(block: str, check_sole_proprietor: bool = True) -> dict[str, str | None]:
     result: dict[str, str | None] = {"krs": None, "nip": None, "regon": None}
-    is_sole_proprietor = bool(
+    is_sole_proprietor = check_sole_proprietor and bool(
         re.search(r"\b(?:CEIDG|przedsiębiorc\w*)\b", block, re.IGNORECASE)
     )
     for key, digits in (("krs", 10), ("nip", 10), ("regon", (9, 14))):
@@ -565,12 +565,9 @@ def _principal_blocks(text: str) -> list[str]:
 
 
 def _principal_registry(block: str) -> dict[str, str | None]:
-    result = {"krs": None, "nip": None}
-    for key, length in (("krs", 10), ("nip", 10)):
-        match = re.search(rf"\b{key}\s*:?\s*(\d{{{length}}})\b", block, re.IGNORECASE)
-        if match:
-            result[key] = match.group(1)
-    return result
+    # "wpisana do rejestru przedsiębiorców KRS" is not a sole proprietor - keep the KRS
+    registry = _registry(block, check_sole_proprietor=False)  # tolerates "NIP: 999-295-65-50"
+    return {"krs": registry["krs"], "nip": registry["nip"]}
 
 
 def _principal_data(block: str) -> dict[str, Any]:
@@ -593,7 +590,7 @@ def _principal_data(block: str) -> dict[str, Any]:
     name = _principal_name(block)
     if name:
         name = re.split(
-            r"\s+(?:\(?KRS\b|NIP\b|REGON\b|\(dalej\b)",
+            r"\s+(?:\(?KRS\b|NIP\b|REGON\b|\(dalej\b|z\s+siedzib\w*\b)",
             name,
             maxsplit=1,
             flags=re.IGNORECASE,
@@ -698,6 +695,45 @@ def _principal_name(block: str) -> str | None:
 
 def _lawyer_names(text: str) -> list[str]:
     return list(dict.fromkeys(_flat(match.group("name")) for match in _LAWYER_PATTERN.finditer(text)))
+
+
+_NOT_A_NAME = re.compile(
+    r"(?i)\b(?:signature|verified|dokument|podpisan\w*|www|kancelari\w*|zarząd\w*|prezes\w*|"
+    r"prokurent\w*|członek|wiceprezes\w*|spółk\w*|mocodaw\w*|pełnomocni\w*|radca|adwokat|data)\b"
+)
+
+
+def _person(candidate: str) -> str | None:
+    """'Szymon Brzozowski - Wiceprezes Zarządu' / 'MATEUSZ WIERZBICKI (adwokat, ...)' -> 'Szymon Brzozowski'."""
+    candidate = re.split(r"\s+[–-]\s+|\(|,", _flat(candidate))[0]
+    candidate = re.sub(r"(?i)^(?:r\.\s*pr\.|adw\.|radca\s+prawny|adwokat|mec\.)\s+", "", candidate).strip(" .;:")
+    words = candidate.split()
+    if not 2 <= len(words) <= 3 or _NOT_A_NAME.search(candidate):
+        return None
+    if not all(re.fullmatch(r"[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+(?:-[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]+)?", w.capitalize()) for w in words):
+        return None
+    return " ".join(w if not w.isupper() else w.capitalize() for w in words)
+
+
+def _granted_names(text: str) -> list[str]:
+    """Attorneys listed after 'udziela pełnomocnictwa:' up to 'do reprezentowania'."""
+    match = re.search(
+        r"(?is)\budziel\w*\s+pełnomocnictw\w*\s*:?\s*(.+?)(?=\bdo\s+(?:reprezentowania|występowania|działania)\b|\bw\s+sprawie\b)",
+        text,
+    )
+    if not match:
+        return []
+    parts = re.split(r"\n|\s+oraz\s+|\s+i\s+|;", match.group(1))
+    return list(dict.fromkeys(name for part in parts if (name := _person(part))))
+
+
+def _represented_by(text: str) -> list[str]:
+    """Signers named in 'reprezentowana przez: A – Prezes Zarządu, B – Członek Zarządu (dalej ...'."""
+    match = re.search(r"(?is)\breprezentowan\w*\s+przez\s*:?\s*(.+?)(?=\(\s*dalej|\bniniejszym\b|\budziel)", text)
+    if not match:
+        return []
+    parts = re.split(r",|\s+oraz\s+|\s+i\s+|;", match.group(1))
+    return list(dict.fromkeys(name for part in parts if (name := _person(part))))
 
 
 def _pure_person_line(line: str) -> str | None:
@@ -850,11 +886,16 @@ def _signature_person_line(
 def extract_pelnomocnictwo(text: str) -> dict[str, Any]:
     principal_blocks = _principal_blocks(text)
     principal_data = [_principal_data(block) for block in principal_blocks]
-    attorneys = _lawyer_names(text)
+    attorneys = _lawyer_names(text) or _granted_names(text)
     principal_names = [
         data["nazwa"] for data in principal_data if data["nazwa"] is not None
     ]
     signers = _signer_names(text, principal_names, attorneys)
+    if len(principal_data) == 1:
+        # real documents: "reprezentowana przez: A – Prezes Zarządu" names the signers explicitly;
+        # drop scanner/e-signature noise ("Signature Not Verified") picked up near the bottom
+        represented = _represented_by(text[: _principal_grant_start(text) + 40])
+        signers = [represented] if represented else [[n for n in (signers[0] if signers else []) if _person(n)]]
     principals = []
     for index, data in enumerate(principal_data):
         signer_names = signers[index] if index < len(signers) else []
