@@ -6,7 +6,8 @@ from collections.abc import Callable
 from app.classes.registry import load_classes
 from app.classifier import classify
 from app.config import get_settings
-from app.extraction.pdf_text import extract_pages
+from app.extraction.ocr_fix import fix_text
+from app.extraction.pdf_text import PageText, extract_pages
 from app.extractor import extract
 
 
@@ -19,9 +20,16 @@ def process_pdf(pdf_bytes: bytes, filename: str = "") -> dict:
     return process_document(lambda end, start=0: extract_pages(pdf_bytes, end, start), filename)
 
 
+def _repaired(pages: list[PageText]) -> list[PageText]:
+    """Strony z OCR: przywrócenie polskich znaków zgubionych przez OCR (app/extraction/ocr_fix.py)."""
+    return [PageText(p.number, fix_text(p.text), p.source) if p.source == "ocr" else p for p in pages]
+
+
 def process_document(load_pages: Callable[..., list], filename: str = "") -> dict:
     """Jak process_pdf, ale strony dostarcza load_pages(end, start) - np. z cache w benchmarku."""
     started = time.perf_counter()
+    raw_loader = load_pages
+    load_pages = lambda end, start=0: _repaired(raw_loader(end, start))  # noqa: E731
     classes = load_classes()
     # najpierw tylko strony potrzebne do klasyfikacji - OCR skanów jest najdroższym krokiem
     pages = load_pages(get_settings().classify_max_pages)
