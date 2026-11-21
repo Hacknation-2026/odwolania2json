@@ -4,9 +4,7 @@
 3: Decyzja o wykluczeniu wykonawcy
 4: Publikacja specyfikacji warunków zamówienia (SWZ)
 5: Modyfikacja treści SWZ
-# czynnosc_powod_id_dict.md podaje "Odpowiedzi/wyjaśnienia do SWZ", ale wszystkie wzorce
-# w dane/ używają poniższej wersji - przyjmujemy wersję z danych referencyjnych.
-6: Odpowiedzi i wyjaśnienia do SWZ
+6: Odpowiedzi/wyjaśnienia do SWZ
 7: Zaniechanie odrzucenia oferty
 8: Zaniechanie wykluczenia wykonawcy
 9: Decyzja o unieważnieniu postępowania

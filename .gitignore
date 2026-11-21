@@ -1,14 +1,18 @@
 __pycache__/
 *.py[cod]
 .venv/
+model/.venv/
 venv/
 .env
 .pytest_cache/
 .ruff_cache/
 
-# dane UZP (klon repo) i wyniki
-data/
+# dane UZP (klon repo), ślady przetwarzania, dane z augmentacji
+/data/
 logs/
+model/data/raw_augmented/*
+
+# input/ i output/ muszą istnieć w katalogu głównym (wymóg UZP); ich zawartość nie trafia do repo
 input/*
 !input/.gitkeep
 output/*

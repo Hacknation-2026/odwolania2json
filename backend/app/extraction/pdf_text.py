@@ -14,12 +14,13 @@ class PageText:
     source: str  # "text" | "ocr" | "empty"
 
 
-def extract_pages(pdf_bytes: bytes, max_pages: int) -> list[PageText]:
+def extract_pages(pdf_bytes: bytes, max_pages: int, start: int = 0) -> list[PageText]:
+    """Pages start+1 .. max_pages (1-based numbers); OCR only for pages without a text layer."""
     settings = get_settings()
     pages: list[PageText] = []
     pdf = pdfium.PdfDocument(pdf_bytes)
     try:
-        for i in range(min(max_pages, len(pdf))):
+        for i in range(start, min(max_pages, len(pdf))):
             page = pdf[i]
             text = page.get_textpage().get_text_range().replace("\r\n", "\n").strip()
             if len(text) >= settings.ocr_min_chars or not settings.ocr_enabled:

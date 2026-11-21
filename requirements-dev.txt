@@ -1,0 +1,4 @@
+# Tylko narzędzia deweloperskie (augmentacja skanów: model/src/augment.py); aplikacja ich nie potrzebuje.
+-r requirements.txt
+PyMuPDF>=1.24           # AGPL-3.0
+pillow>=10.0            # MIT-CMU

@@ -1,4 +1,4 @@
-"""PDF -> tekst (+OCR) -> klasyfikacja (lokalny model) -> ekstrakcja (LLM) -> JSON (+ ślad)."""
+"""PDF -> tekst (+OCR) -> klasyfikacja (lokalny model) -> ekstrakcja (lokalne reguły) -> JSON (+ ślad)."""
 
 import time
 
@@ -10,22 +10,23 @@ from app.extractor import extract
 
 
 def _join(pages) -> str:
-    return "\n\n".join(f"[strona {p.number}]\n{p.text}" for p in pages)
+    return "\n\n".join(p.text for p in pages if p.text)
 
 
 def process_pdf(pdf_bytes: bytes, filename: str = "") -> dict:
     """Zwraca {document_type, data, trace}. `data` = None dla dokumentów spoza klas (pusty JSON)."""
     started = time.perf_counter()
     classes = load_classes()
-    max_pages = max([get_settings().classify_max_pages, *(c.max_pages for c in classes.values())])
-    pages = extract_pages(pdf_bytes, max_pages)
-
+    # najpierw tylko strony potrzebne do klasyfikacji - OCR skanów jest najdroższym krokiem
+    pages = extract_pages(pdf_bytes, get_settings().classify_max_pages)
     classification = classify(pages)
     doc_class = classes.get(classification["class"])
 
-    data, raw = None, None
+    data, raw, method = None, None, None
     if doc_class:
-        data, raw = extract(_join(pages[: doc_class.max_pages]), doc_class)
+        if doc_class.max_pages > len(pages):
+            pages += extract_pages(pdf_bytes, doc_class.max_pages, start=len(pages))
+        data, raw, method = extract(_join(pages[: doc_class.max_pages]), doc_class)
 
     return {
         "file": filename,
@@ -33,8 +34,8 @@ def process_pdf(pdf_bytes: bytes, filename: str = "") -> dict:
         "data": data,
         "trace": {  # transparentność: skąd wziął się wynik
             "classification": classification,
+            "extraction": {"method": method, "raw_output": raw},
             "pages": [{"number": p.number, "source": p.source, "chars": len(p.text)} for p in pages],
-            "llm_raw_output": raw,
             "seconds": round(time.perf_counter() - started, 2),
         },
     }
