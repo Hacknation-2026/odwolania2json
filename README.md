@@ -86,17 +86,18 @@ To expand the training set from the initial 150 documents and prevent overfittin
 
 ### Degradation Effects
 
+- **Bad Fit to Page / Sizing Mismatch**: Scales down the page content (e.g. 70% to 92%) with an outer margin border (pure white, scanner bed gray, or tinted paper) and subtle page boundary lines, simulating "shrink to printable area" double scaling when printing/scanning documents.
 - **Photometric Variations**: Brightness scaling (underexposed/dark to washed out), low/high contrast, uneven lighting and shadow gradients (scanner lid gaps, hand/mobile shadows).
 - **Geometric & Orientation Distortions**: 180° page flips (common in Automatic Document Feeder scans), 90°/270° orientation mismatch, slight skew angles (±0.5° to ±4°).
 - **Physical & Sensor Artifacts**: Salt-and-pepper noise (dust on glass platen), vertical scanner slit streaks, Gaussian defocus blur, paper background tinting, and JPEG compression artifacts.
-- **Searchable PDF Compliance**: Input is `.pdf` and output remains a valid `.pdf` embedding a searchable text layer and optional simulated OCR misreadings.
+- **Searchable PDF Compliance**: Input is `.pdf` and output remains a valid `.pdf` embedding a searchable text layer aligned with the scaled/distorted page and optional simulated OCR misreadings.
 
 ### Usage
 
-Augment a single PDF:
+Augment a single PDF with bad fit to page:
 
 ```bash
-model/.venv/bin/python model/src/augment.py --input-file model/data/raw/przyklad_01/odwolanie.pdf --output distorted.pdf
+model/.venv/bin/python model/src/augment.py --input-file model/data/raw/przyklad_01/odwolanie.pdf --output distorted.pdf --bad-fit --bad-fit-scale-min 0.75 --bad-fit-border scanner_gray
 ```
 
 Augment a single case folder:
