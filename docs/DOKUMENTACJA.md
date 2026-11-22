@@ -34,12 +34,12 @@ JSON  (+ ślad przetwarzania w logs/)
 
 | Moduł | Rola |
 |---|---|
-| `backend/app/cli.py` | CLI: `input/` → `output/` (to samo drzewo i nazwy), uruchamiane przez `start.bat` |
-| `backend/app/main.py`, `gui.py`, `frontend/` | API (FastAPI) i GUI w przeglądarce (`start_gui.bat`) |
+| `backend/app/cli.py` | CLI: `input/` → `output/` (to samo drzewo i nazwy), uruchamiane przez `start.sh` / `start.bat` |
+| `backend/app/main.py`, `gui.py`, `frontend/` | API (FastAPI) i GUI w przeglądarce (`start_gui.sh` / `start_gui.bat`) |
 | `backend/app/pipeline.py` | spina kroki 1–5; OCR tylko dla stron, które są potrzebne |
 | `backend/config/classes/*.yaml` | **klasy dokumentów** – jedyne miejsce, które trzeba zmienić przy rozbudowie |
 | `backend/config/dictionaries/*.yaml` | słowniki (np. powody odwołania) |
-| `backend/app/train_classifier.py` | trening klasyfikatora z klas w YAML (`train.bat`) |
+| `backend/app/train_classifier.py` | trening klasyfikatora z klas w YAML (`train.sh` / `train.bat`) |
 | `backend/scripts/bench.py` | pomiar F1 na danych UZP (syntetyczne, negatywy, prawdziwe skany) |
 
 Wszystkie zależności są open source (licencje w `requirements.txt`).
@@ -122,8 +122,8 @@ Bez zmian w kodzie:
 
 1. **Plik klasy** – utwórz `backend/config/classes/<nazwa>.yaml` z `output` i regułami `extract:` (wzór: `config/examples/ogloszenie_bzp.yaml`; można go po prostu skopiować).
 2. **Przykłady** – wrzuć kilka PDF-ów do `training/<nazwa>/`. Dokumenty, które mają być odrzucane, do `training/brak/`. Alternatywnie układ UZP: PDF + oczekiwany JSON obok (klasa rozpoznawana po kluczach JSON-a).
-3. **Trening** – uruchom `train.bat` (ok. minuty na CPU). Przed zapisem modelu wypisuje wynik walidacji krzyżowej z odłożonymi całymi sprawami.
-4. **Sprawdzenie** – wrzuć przykład do GUI (`start_gui.bat`) i obejrzyj „Ślad przetwarzania” albo uruchom `start.bat`.
+3. **Trening** – uruchom `./train.sh` (Windows: `train.bat`; ok. minuty na CPU). Przed zapisem modelu wypisuje wynik walidacji krzyżowej z odłożonymi całymi sprawami.
+4. **Sprawdzenie** – wrzuć przykład do GUI (`start_gui.sh` / `start_gui.bat`) i obejrzyj „Ślad przetwarzania” albo uruchom `start.sh` / `start.bat`.
 
 Bez reguł `extract:` nowa klasa dostaje szablon z wartościami `null` (a jeśli w `.env` ustawiono `LLM_API_KEY` – pola wypełnia LLM według opisów z YAML).
 

@@ -4,6 +4,6 @@
 # Sciezki w argumentach (--data) liczone od folderu projektu.
 set -euo pipefail
 cd "$(dirname "$0")"
-tools/setup.sh
+bash tools/setup.sh  # bash: dziala tez bez praw wykonywania (np. po rozpakowaniu ZIP)
 export PYTHONPATH="$PWD/backend${PYTHONPATH:+:$PYTHONPATH}"
 exec .venv/bin/python -m app.train_classifier "$@"

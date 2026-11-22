@@ -4,6 +4,6 @@
 # Dostep z innego komputera (np. GUI z maszyny wirtualnej): GUI_HOST=0.0.0.0 ./start_gui.sh
 set -euo pipefail
 cd "$(dirname "$0")"
-tools/setup.sh
+bash tools/setup.sh  # bash: dziala tez bez praw wykonywania (np. po rozpakowaniu ZIP)
 export PYTHONPATH="$PWD/backend${PYTHONPATH:+:$PYTHONPATH}"
 exec .venv/bin/python -m app.gui "$@"
