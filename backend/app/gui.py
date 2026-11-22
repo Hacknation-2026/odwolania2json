@@ -33,11 +33,14 @@ def _open_when_ready(url: str, timeout: float = 30) -> None:
 
 
 def main() -> None:
-    port = _free_port(get_settings().gui_port)
+    s = get_settings()
+    port = _free_port(s.gui_port)
     url = f"http://localhost:{port}"
     print(f"Odwołania2json GUI: {url}  (Ctrl+C kończy)")
+    if s.gui_host not in ("127.0.0.1", "localhost"):
+        print(f"Dostępne też z innych komputerów: http://<adres-tej-maszyny>:{port}")
     threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
-    uvicorn.run("app.main:app", host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run("app.main:app", host=s.gui_host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":

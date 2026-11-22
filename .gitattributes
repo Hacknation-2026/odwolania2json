@@ -1,3 +1,4 @@
 # pliki wsadowe Windows musza miec konce linii CRLF (inaczej goto/call do etykiet bywa zawodne)
 *.bat text eol=crlf
 *.cmd text eol=crlf
+*.sh text eol=lf

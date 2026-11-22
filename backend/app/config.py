@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     # model rozpoznawania pisma łacińskiego (PP-OCRv5, Apache-2.0) dołączony do repo - bez pobierania przy pierwszym skanie
     ocr_rec_model_path: Path = ROOT_DIR / "model" / "ocr" / "latin_PP-OCRv5_rec_mobile.onnx"
 
-    gui_port: int = 8765  # first port tried by start_gui.bat; next free one is used if taken
+    gui_port: int = 8765  # first port tried by start_gui.bat/.sh; next free one is used if taken
+    # 127.0.0.1 = GUI only on this computer; GUI_HOST=0.0.0.0 opens it to the network (e.g. a VM)
+    gui_host: str = "127.0.0.1"
 
     config_dir: Path = BACKEND_DIR / "config"
     frontend_dir: Path = ROOT_DIR / "frontend"
