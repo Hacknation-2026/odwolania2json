@@ -7,7 +7,7 @@ Rozpoznaje dokumenty ze sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, po
 
 **Stack (tylko open source):** Python 3.13, pypdfium2, RapidOCR/ONNX Runtime, scikit-learn, FastAPI. Opcjonalnie LLM przez API zgodne z OpenAI – tylko dla nowych klas z YAML, które nie mają jeszcze reguł, i tylko gdy w `.env` ustawiono `LLM_API_KEY`.
 
-Wynik na danych UZP (`dane/`, 226 PDF-ów): F1 0,978; dokumenty syntetyczne 0,997, prawdziwe skany (`dane/skany`) 0,85–0,86 (także na odłożonej części, nieużywanej przy pisaniu reguł), negatywy 16/16 odrzucone. Pomiar: `python backend/scripts/bench.py`. Dokumentacja techniczna: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
+Wynik na danych UZP (`dane/`, 226 PDF-ów): F1 0,978; dokumenty syntetyczne 0,997, prawdziwe skany (`dane/skany`) 0,85–0,86 (także na odłożonej części, nieużywanej przy pisaniu reguł), negatywy 16/16 odrzucone. Pomiar: `python backend/scripts/bench.py`. Raport z wynikami (macierze pomyłek, F1 per pole, postęp optymalizacji): [docs/wyniki.html](docs/wyniki.html). Dokumentacja techniczna: [docs/DOKUMENTACJA.md](docs/DOKUMENTACJA.md).
 
 ## Uruchomienie (Windows)
 
