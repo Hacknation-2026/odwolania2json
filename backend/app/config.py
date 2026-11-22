@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # linie tekstu rozpoznawane pojedynczo: ~2x szybciej niż paczkami po 6 przy prawie tej samej jakości
     # (limit UZP: 150 PDF-ów w 45 min na laptopie bez GPU)
     ocr_rec_batch: int = 1
+    ocr_threads: int = -1  # wątki OCR (env OCR_THREADS); -1 = automatycznie (app/extraction/ocr.py: _threads)
     # model rozpoznawania pisma łacińskiego (PP-OCRv5, Apache-2.0) dołączony do repo - bez pobierania przy pierwszym skanie
     ocr_rec_model_path: Path = ROOT_DIR / "model" / "ocr" / "latin_PP-OCRv5_rec_mobile.onnx"
 

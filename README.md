@@ -33,7 +33,7 @@ GUI: **`start_gui.sh`** / **`start_gui.bat`** – otwiera przeglądarkę, jeśli
 
 Każde uruchomienie najpierw czyści wyniki poprzednich z `output/`, więc po przebiegu `output/` odpowiada dokładnie PDF-om z `input/` (`--keep-output` wyłącza czyszczenie; inne foldery: `./start.sh --input <folder> --output <folder>` lub to samo ze `start.bat` – ścieżki liczone od folderu projektu, folder podany w `--output` nie jest czyszczony). `input/` nie jest zmieniany. Dokumenty spoza klas i nieczytelne PDF-y dostają pusty plik `.json`; jeden zły plik nie zatrzymuje reszty.
 
-Czas na laptopie bez GPU: dokument z warstwą tekstową poniżej 1 s, skan ok. 2 s na stronę (OCR).
+Czas na laptopie bez GPU: dokument z warstwą tekstową poniżej 1 s, skan ok. 2–5 s na stronę (OCR; gęsto zapisane strony dłużej). OCR obejmuje tylko potrzebne strony: do klasyfikacji zwykle wystarcza pierwsza, a ze skanu odwołania czytane są 2 pierwsze strony (`max_ocr_pages` w YAML) – skan odwołania ok. 8–10 s (także przy 2 rdzeniach, jak na maszynie wirtualnej UZP).
 
 Opcjonalnie Docker: `docker compose up --build` (API na :8000, GUI na :8080).
 

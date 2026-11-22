@@ -54,6 +54,7 @@ label: Potwierdzenie przelewu     # nazwa wyświetlana w GUI
 description: >                    # opis (GUI, opcjonalny LLM)
   Potwierdzenie wykonania przelewu bankowego...
 max_pages: 1                      # ile pierwszych stron czytać przy ekstrakcji
+max_ocr_pages: 1                  # opcjonalnie: limit stron dla skanów (OCR to najdroższy krok)
 rules: przelew                    # opcjonalnie: wbudowane reguły Pythona dla tej klasy
 output:                           # SZABLON wynikowego JSON-a - dokładnie taki kształt dostaje plik
   przelew_bankowy:
@@ -161,4 +162,11 @@ Pomiar na danych UZP (`dane/`, 226 PDF-ów), F1 na poziomie pól (`backend/scrip
 
 Skany są podzielone na stałe: reguły były rozwijane tylko na części roboczej, odłożona część (`0003`, `0006`, `0009` każdego typu) przybliża wynik na ukrytym zbiorze testowym. Słownik do naprawy OCR jest budowany wyłącznie z dokumentów z warstwą tekstową, nigdy ze skanów.
 
-Wydajność (laptop, CPU, bez GPU): dokument z warstwą tekstową < 0,5 s, skan ok. 2 s na stronę OCR; pełny zbiór UZP (226 plików) ok. 4 minuty – z dużym zapasem względem limitu 150 plików / 45 minut.
+Wydajność (laptop, CPU, bez GPU): dokument z warstwą tekstową < 0,5 s, skan ok. 2–5 s na stronę OCR; pełny zbiór UZP (226 plików) ok. 2 minuty – z dużym zapasem względem limitu 150 plików / 45 minut.
+
+OCR jest najdroższym krokiem, dlatego obejmuje tylko potrzebne strony:
+- **klasyfikacja** czyta kolejne strony tylko wtedy, gdy na poprzednich jest za mało tekstu (`classify_min_chars`) – zwykle wystarcza pierwsza,
+- **ekstrakcja ze skanu** czyta najwyżej `max_ocr_pages` stron (odwołanie: 2 – dane z nagłówka są na 1–2 stronie; F1 na skanach UZP bez zmian, a dokumenty z warstwą tekstową nadal czytane do `max_pages`),
+- **wątki OCR** dobierane do maszyny: na małej maszynie (do 4 procesorów logicznych, np. VM z 2 vCPU) wszystkie, na większej – domyślnie ONNX Runtime, jeden na rdzeń fizyczny (`OCR_THREADS` nadpisuje).
+
+Skan 4-stronicowego odwołania: ok. 19 s → ok. 9 s na laptopie, ok. 10 s przy 2 procesorach.

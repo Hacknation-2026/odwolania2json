@@ -25,6 +25,21 @@ def _repaired(pages: list[PageText]) -> list[PageText]:
     return [PageText(p.number, fix_text(p.text), p.source) if p.source == "ocr" else p for p in pages]
 
 
+def _classification_pages(load_pages: Callable[..., list]) -> list:
+    """Pages one by one, only as many as the classifier reads (classifier_text stops at classify_min_chars):
+    a scanned page costs seconds of OCR, so page 2-3 is read only when page 1 has too little text."""
+    s = get_settings()
+    pages: list = []
+    while len(pages) < s.classify_max_pages:
+        more = load_pages(len(pages) + 1, len(pages))
+        if not more:  # end of document
+            break
+        pages += more
+        if sum(len(p.text) for p in pages if p.text) >= s.classify_min_chars:
+            break
+    return pages
+
+
 def process_document(load_pages: Callable[..., list], filename: str = "") -> dict:
     """Jak process_pdf, ale strony dostarcza load_pages(end, start) - np. z cache w benchmarku."""
     started = time.perf_counter()
@@ -32,15 +47,18 @@ def process_document(load_pages: Callable[..., list], filename: str = "") -> dic
     load_pages = lambda end, start=0: _repaired(raw_loader(end, start))  # noqa: E731
     classes = load_classes()
     # najpierw tylko strony potrzebne do klasyfikacji - OCR skanów jest najdroższym krokiem
-    pages = load_pages(get_settings().classify_max_pages)
+    pages = _classification_pages(load_pages)
     classification = classify(pages)
     doc_class = classes.get(classification["class"])
 
     data, raw, method = None, None, None
     if doc_class:
-        if doc_class.max_pages > len(pages):
-            pages += load_pages(doc_class.max_pages, len(pages))
-        data, raw, method = extract(_join(pages[: doc_class.max_pages]), doc_class)
+        limit = doc_class.max_pages
+        if doc_class.max_ocr_pages and any(p.source == "ocr" for p in pages):  # scan: OCR is the costly step
+            limit = min(limit, doc_class.max_ocr_pages)
+        if limit > len(pages):
+            pages += load_pages(limit, len(pages))
+        data, raw, method = extract(_join(pages[:limit]), doc_class)
 
     return {
         "file": filename,

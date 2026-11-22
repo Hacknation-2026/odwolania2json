@@ -18,6 +18,8 @@ class DocumentClass(BaseModel):
     label: str = ""  # display name for the GUI; falls back to `name`
     description: str
     max_pages: int = 3
+    # dla skanów (strony z OCR, ~3-6 s każda na CPU) czytaj najwyżej tyle stron; None = max_pages
+    max_ocr_pages: int | None = None
     instructions: str = ""
     # wbudowane reguły Pythona dla tej klasy (app/extractor.py: BUILTIN_RULES); pola z `extract:`
     # w szablonie uzupełniają ich wynik - nowa klasa może mieć wyłącznie reguły z YAML

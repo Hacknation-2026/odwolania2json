@@ -8,6 +8,8 @@ description: >
   lub zaniechania zamawiającego w postępowaniu o udzielenie zamówienia publicznego.
   Zawiera sekcje Odwołujący / Zamawiający, zarzuty i żądania.
 max_pages: 4
+# skany: dane z nagłówka (strony, daty, postępowanie) są na 1-2 stronie; F1 na skanach UZP bez zmian, OCR o połowę krótszy
+max_ocr_pages: 2
 # wbudowane reguły Pythona (app/extraction/rules.py); pola z `extract:` w szablonie je uzupełniają
 rules: odwolanie
 instructions: >
